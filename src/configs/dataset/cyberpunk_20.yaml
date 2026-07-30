@@ -1,0 +1,82 @@
+_target_: src.datasets.prompt_pairs.PromptPairDataset
+
+pairs:
+  - name: city
+    negative_prompt: "a photograph of a city"
+    positive_prompt: "a photograph of a city in cyberpunk style"
+
+  - name: car
+    negative_prompt: "a photograph of a car"
+    positive_prompt: "a photograph of a car in cyberpunk style"
+
+  - name: house
+    negative_prompt: "a photograph of a house"
+    positive_prompt: "a photograph of a house in cyberpunk style"
+
+  - name: dog
+    negative_prompt: "a photograph of a dog"
+    positive_prompt: "a photograph of a dog in cyberpunk style"
+
+  - name: forest
+    negative_prompt: "a photograph of a forest"
+    positive_prompt: "a photograph of a forest in cyberpunk style"
+
+  - name: woman
+    negative_prompt: "a photograph of a woman"
+    positive_prompt: "a photograph of a woman in cyberpunk style"
+
+  - name: man
+    negative_prompt: "a photograph of a man"
+    positive_prompt: "a photograph of a man in cyberpunk style"
+
+  - name: train
+    negative_prompt: "a photograph of a train"
+    positive_prompt: "a photograph of a train in cyberpunk style"
+
+  - name: motorcycle
+    negative_prompt: "a photograph of a motorcycle"
+    positive_prompt: "a photograph of a motorcycle in cyberpunk style"
+
+  - name: street
+    negative_prompt: "a photograph of a street"
+    positive_prompt: "a photograph of a street in cyberpunk style"
+
+  - name: restaurant
+    negative_prompt: "a photograph of a restaurant"
+    positive_prompt: "a photograph of a restaurant in cyberpunk style"
+
+  - name: bedroom
+    negative_prompt: "a photograph of a bedroom"
+    positive_prompt: "a photograph of a bedroom in cyberpunk style"
+
+  - name: bridge
+    negative_prompt: "a photograph of a bridge"
+    positive_prompt: "a photograph of a bridge in cyberpunk style"
+
+  - name: mountain
+    negative_prompt: "a photograph of a mountain"
+    positive_prompt: "a photograph of a mountain in cyberpunk style"
+
+  - name: robot
+    negative_prompt: "a photograph of a robot"
+    positive_prompt: "a photograph of a robot in cyberpunk style"
+
+  - name: astronaut
+    negative_prompt: "a photograph of an astronaut"
+    positive_prompt: "a photograph of an astronaut in cyberpunk style"
+
+  - name: cat
+    negative_prompt: "a photograph of a cat"
+    positive_prompt: "a photograph of a cat in cyberpunk style"
+
+  - name: ship
+    negative_prompt: "a photograph of a ship"
+    positive_prompt: "a photograph of a ship in cyberpunk style"
+
+  - name: office
+    negative_prompt: "a photograph of an office"
+    positive_prompt: "a photograph of an office in cyberpunk style"
+
+  - name: portrait
+    negative_prompt: "a portrait photograph of a person"
+    positive_prompt: "a portrait photograph of a person in cyberpunk style"

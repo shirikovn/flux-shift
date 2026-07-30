@@ -1,0 +1,61 @@
+_target_: src.shift.manager.ShiftInterventionManager
+
+mode: steer
+
+blocks: []
+steps: []
+
+collector: null
+
+controller:
+  _target_: src.shift.steering.TokenWiseSteeringController
+
+  vector_directory: ${shift.artifacts_root}/dit/vectors
+
+  block_indices:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+
+  source_step: 0
+
+  operation: erase
+  strength: 0.0
+  use_classifier: false
+  validate_runtime: false
+
+  regularizer:
+    _target_: src.shift.regularizer.BlockwiseSVMRegularizer
+
+    classifier_directory: >-
+      ${shift.artifacts_root}/svm_training/classifiers
+
+    block_indices:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+
+    source_step: 0
+    eps: 1.0e-6
+    eta_max: ${shift.eta_max}
+
+pooled_controller:
+  _target_: src.shift.pooled.PooledSteeringController
+
+  vector_path: >-
+    ${shift.artifacts_root}/pooled/pooled/pooled_vector.pt
+
+  target_embedding_path: >-
+    ${shift.artifacts_root}/pooled/pooled/target_embedding.pt
+
+  operation: erase
+  strength: 0.0
+  enabled: false
+
+  similarity_mode: raw
+  normalize_vector: false
+  eps: 1.0e-8

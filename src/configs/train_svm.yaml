@@ -1,0 +1,19 @@
+defaults:
+  - trainer: linear_svm
+  - _self_
+
+# Контрольная статическая конфигурация для следующей абляции:
+reference:
+  schedule: early
+  blocks: [0, 1, 2, 3, 4]
+  steps: [0, 1, 2, 3]
+  static_alpha: 50.0
+
+hydra:
+  run:
+    dir: outputs/svm_training/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+  job:
+    chdir: false
+
+  output_subdir: .hydra

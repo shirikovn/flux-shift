@@ -1,0 +1,93 @@
+defaults:
+  - model: flux_schnell
+  - generation: schnell_512
+  - intervention: steer_full_shift
+  - pipeline: steering_experiment
+  - _self_
+
+seed: 123
+device: cuda
+
+shift:
+  artifacts_root: artifacts/cyberpunk
+
+  schedule_name: early
+
+  blocks:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+
+  steps:
+    - 0
+    - 1
+    - 2
+    - 3
+
+  dit_gamma: 20.0
+  pooled_gamma: 6.0
+  eta_max: 4.0
+
+experiment:
+  output_dir: ${hydra:runtime.output_dir}
+
+  strengths:
+    - ${shift.dit_gamma}
+
+  schedules:
+    # Оставляем DiT-only в качестве абляционного контроля.
+    - name: dit_only
+      blocks: ${shift.blocks}
+      steps: ${shift.steps}
+
+      strengths:
+        - ${shift.dit_gamma}
+
+      use_classifier: true
+
+      use_pooled: false
+      pooled_strength: 0.0
+      pooled_similarity_mode: raw
+
+    # Финальный метод.
+    - name: full_shift
+      blocks: ${shift.blocks}
+      steps: ${shift.steps}
+
+      strengths:
+        - ${shift.dit_gamma}
+
+      use_classifier: true
+
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: raw
+
+  cases:
+    - name: target_present
+      operation: erase
+      prompt: >-
+        a photograph of a woman standing near a train station
+        in cyberpunk style
+
+    - name: strongly_target_present
+      operation: erase
+      prompt: >-
+        a cinematic cyberpunk photograph of a woman standing
+        near a futuristic train station with neon lights
+
+    - name: target_absent
+      operation: erase
+      prompt: >-
+        a photograph of a woman standing near a train station
+
+hydra:
+  run:
+    dir: outputs/full_shift/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+  job:
+    chdir: false
+
+  output_subdir: .hydra

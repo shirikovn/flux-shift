@@ -1,0 +1,24 @@
+defaults:
+  - model: flux_schnell
+  - generation: schnell_512
+  - intervention: collect_mean_difference
+  - dataset: cyberpunk_5
+  - pipeline: activation_collection
+  - _self_
+
+seed: 0
+device: cuda
+
+output_dir: ${hydra:runtime.output_dir}
+
+collection:
+  vary_seed_between_pairs: true
+
+hydra:
+  run:
+    dir: outputs/collect/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+  job:
+    chdir: false
+
+  output_subdir: .hydra

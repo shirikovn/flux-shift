@@ -1,0 +1,36 @@
+_target_: src.classifiers.svm_trainer.LinearSVMTrainer
+
+dataset_dir: outputs/stage6/cyberpunk_svm_dataset/svm_dataset
+output_dir: ${hydra:runtime.output_dir}/classifiers
+
+block_indices:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
+  - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 17
+  - 18
+
+source_step: 0
+
+# 4 пары validation, 16 пар train.
+validation_fraction: 0.2
+random_seed: 123
+
+c: 1.0
+class_weight: balanced
+standardize: true
+probability: true

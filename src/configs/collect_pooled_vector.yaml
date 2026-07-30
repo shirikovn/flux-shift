@@ -1,0 +1,21 @@
+defaults:
+  - model: flux_schnell
+  - generation: schnell_512
+  - dataset: cyberpunk_20
+  - pipeline: pooled_vector_collection
+  - _self_
+
+device: cuda
+
+target_prompt: "cyberpunk style"
+
+output_dir: ${hydra:runtime.output_dir}/pooled
+
+hydra:
+  run:
+    dir: outputs/pooled_collection/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+  job:
+    chdir: false
+
+  output_subdir: .hydra

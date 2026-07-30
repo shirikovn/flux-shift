@@ -1,0 +1,13 @@
+_target_: src.models.flux_model.FluxModel
+
+repo_id: black-forest-labs/FLUX.1-schnell
+dtype: bfloat16
+
+memory:
+  strategy: sequential_cpu_offload
+  enable_vae_slicing: true
+  enable_vae_tiling: true
+
+load:
+  use_safetensors: true
+  local_files_only: false

@@ -1,0 +1,17 @@
+# SHIFT generated data
+artifacts/
+outputs/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Hydra
+.hydra/
+
+# IDE
+.idea/
+.vscode/
+
+# System
+.DS_Store
