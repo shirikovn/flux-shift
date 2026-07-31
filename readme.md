@@ -1,4 +1,11 @@
-# SHIFT: подготовка артефактов и запуск экспериментов
+## Пример работы: удаление "концепции Киберпанк"
+> prompt: a cinematic cyberpunk photograph of a woman standing near a futuristic
+
+| Baseline | SHIFT |
+| :--- | :--- |
+| <img width="512" height="512" alt="strongly_target_present__baseline" src="https://github.com/user-attachments/assets/88239b73-0327-4e8d-afac-786b015503b8" /> | <img width="512" height="512" alt="strongly_target_present__full_shift__svm__erase__gamma_20" src="https://github.com/user-attachments/assets/5ce9ec8d-014c-4d24-a04a-ccea3fa59251" /> |
+
+## SHIFT: подготовка артефактов и запуск экспериментов
 
 Этот файл описывает минимальный workflow запуска эксперементов.
 
