@@ -1,8 +1,8 @@
 # SHIFT: подготовка артефактов и запуск экспериментов
 
-Этот файл описывает минимальный workflow без `Makefile`, orchestrator-скрипта и отдельных workflow-конфигов.
+Этот файл описывает минимальный workflow запуска эксперементов.
 
-После объединения collectors схема выглядит так:
+Общая схема выглядит так:
 
 ```text
 prompt pairs
@@ -24,9 +24,6 @@ SVM dataset -> classifiers
 steering vectors + classifiers + pooled vector
     -> Full SHIFT generation
 ```
-
-Важно: количество diffusion steps пока не сокращается. Collection по-прежнему выполняет обычную четырёхшаговую генерацию FLUX. Оптимизация состоит в том, что один и тот же DiT activation теперь одновременно используется для steering vectors и SVM features.
-
 ---
 
 ## 1. Основные скрипты
@@ -64,16 +61,7 @@ src/configs/train_svm.yaml
 src/configs/full_shift_experiment.yaml
 ```
 
-Старые отдельные collection-конфиги больше не входят в основной workflow:
-
-```text
-src/configs/intervention/collect_all_blocks.yaml
-src/configs/intervention/collect_svm_dataset.yaml
-```
-
-После проверки combined collection их можно удалить или перенести в `src/configs/legacy/`.
-
-Для каждой новой концепции пользователь создаёт один dataset-конфиг:
+**Для каждой новой концепции пользователь создаёт один dataset-конфиг:**
 
 ```text
 src/configs/dataset/<dataset_name>.yaml
@@ -508,8 +496,6 @@ pooled_gamma: 3, 6, 9
 eta_max:      4
 ```
 
-Baseline, DiT-only и Full SHIFT должны использовать одинаковый seed.
-
 ## 13. Evaluation prompts
 
 Редактируются в:
@@ -613,37 +599,3 @@ test -f artifacts/<concept>/pooled/pooled/target_embedding.pt
 ```
 
 Для полного набора блоков первые три команды должны вывести `19`.
-
----
-
-## 15. Очистка после миграции
-
-После успешной проверки combined collection можно удалить или перенести в legacy:
-
-```text
-src/configs/intervention/collect_all_blocks.yaml
-src/configs/intervention/collect_svm_dataset.yaml
-```
-
-Старый отдельный путь:
-
-```text
-artifacts/<concept>/svm_dataset/
-```
-
-больше не используется. Новый путь:
-
-```text
-artifacts/<concept>/dit/svm_dataset/
-```
-
-Краткий порядок:
-
-```text
-1. Создать dataset/<dataset_name>.yaml
-2. collect_activations.py + collect_dit_artifacts
-3. train_svm.py
-4. collect_pooled_vector.py
-5. Обновить experiment.cases
-6. full_shift_experiment.py
-```
