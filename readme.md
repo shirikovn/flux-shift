@@ -1,5 +1,5 @@
 ## Пример работы: удаление "концепции Киберпанк"
-> prompt: a cinematic cyberpunk photograph of a woman standing near a futuristic
+> prompt: a cinematic cyberpunk photograph of a woman standing near a futuristic train station with neon lights
 
 | Baseline | SHIFT |
 | :--- | :--- |
