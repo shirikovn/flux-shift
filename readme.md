@@ -263,10 +263,6 @@ positive prompt -> 1
 20 pairs x 2 prompts = 40 генераций
 ```
 
-До объединения выполнялось 80 генераций: 40 для vectors и ещё 40 для SVM dataset.
-
-Количество diffusion steps пока остаётся прежним. Для FLUX.1-schnell это четыре шага на генерацию. Collectors принимают только activation шага `0`, но denoising loop пока выполняется полностью.
-
 ### Создаваемые артефакты
 
 ```text
