@@ -23,8 +23,9 @@ blocks:
   - 17
   - 18
 
-# Collectors сохраняют только activation первого шага.
-# Сама генерация пока продолжает выполнять все 4 шага.
+# The collector captures step 0.
+# ActivationCollectionPipeline stops after this step and
+# returns latent output without running VAE decoding.
 steps:
   - 0
 
