@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import re
 
 import torch
 from diffusers import FluxPipeline
@@ -13,6 +14,9 @@ DTYPES: dict[str, torch.dtype] = {
     "float32": torch.float32,
 }
 
+COMMIT_SHA_PATTERN = re.compile(
+    r"^[0-9a-fA-F]{40}$"
+)
 
 class FluxModel:
     """
@@ -37,6 +41,10 @@ class FluxModel:
 
         self.memory_config = self._to_dict(memory)
         self.load_config = self._to_dict(load)
+
+        self.model_revision = (
+            self._resolve_model_revision()
+        )
 
         self.intervention_manager = (
             intervention_manager
@@ -74,6 +82,57 @@ class FluxModel:
                 f"Unsupported dtype: {dtype_name!r}. "
                 f"Available values: {list(DTYPES)}"
             ) from error
+
+    def _resolve_model_revision(
+        self,
+    ) -> str | None:
+        revision = self.load_config.get(
+            "revision"
+        )
+
+        require_pinned_revision = bool(
+            self.load_config.get(
+                "require_pinned_revision",
+                False,
+            )
+        )
+
+        if revision is None:
+            if require_pinned_revision:
+                raise ValueError(
+                    "load.require_pinned_revision=true, "
+                    "but load.revision is missing."
+                )
+
+            return None
+
+        revision_string = str(revision).strip()
+
+        if not revision_string:
+            if require_pinned_revision:
+                raise ValueError(
+                    "load.require_pinned_revision=true, "
+                    "but load.revision is empty."
+                )
+
+            return None
+
+        if (
+            require_pinned_revision
+            and COMMIT_SHA_PATTERN.fullmatch(
+                revision_string
+            )
+            is None
+        ):
+            raise ValueError(
+                "A reproducible model run requires an "
+                "exact 40-character Git commit SHA. "
+                f"Received revision={revision_string!r}. "
+                "Set load.require_pinned_revision=false "
+                "only for exploratory runs."
+            )
+
+        return revision_string
 
     def prepare_for_inference(self) -> None:
         if self._pipeline is not None:
@@ -121,6 +180,11 @@ class FluxModel:
                 )
             ),
         }
+
+        if self.model_revision is not None:
+            load_kwargs["revision"] = (
+                self.model_revision
+            )
 
         return FluxPipeline.from_pretrained(
             self.repo_id,
@@ -177,6 +241,85 @@ class FluxModel:
             )
 
         return self._pipeline
+
+    def get_model_report(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Return the identity and structure of the loaded model.
+
+        The requested revision is an exact commit SHA for
+        reproducible experiment runs.
+        """
+        pipeline = self.get_pipeline()
+        transformer = pipeline.transformer
+
+        double_stream_blocks = getattr(
+            transformer,
+            "transformer_blocks",
+            (),
+        )
+        single_stream_blocks = getattr(
+            transformer,
+            "single_transformer_blocks",
+            (),
+        )
+
+        transformer_parameter_count = sum(
+            parameter.numel()
+            for parameter in transformer.parameters()
+        )
+
+        return {
+            "repo_id": self.repo_id,
+            "revision": self.model_revision,
+            "revision_is_commit_sha": bool(
+                self.model_revision
+                and COMMIT_SHA_PATTERN.fullmatch(
+                    self.model_revision
+                )
+            ),
+            "dtype": str(self.dtype),
+            "pipeline_class": (
+                type(pipeline).__name__
+            ),
+            "transformer_class": (
+                type(transformer).__name__
+            ),
+            "scheduler_class": (
+                type(pipeline.scheduler).__name__
+            ),
+            "text_encoder_class": (
+                type(pipeline.text_encoder).__name__
+                if pipeline.text_encoder is not None
+                else None
+            ),
+            "text_encoder_2_class": (
+                type(pipeline.text_encoder_2).__name__
+                if pipeline.text_encoder_2 is not None
+                else None
+            ),
+            "vae_class": (
+                type(pipeline.vae).__name__
+                if pipeline.vae is not None
+                else None
+            ),
+            "num_double_stream_blocks": len(
+                double_stream_blocks
+            ),
+            "num_single_stream_blocks": len(
+                single_stream_blocks
+            ),
+            "transformer_parameter_count": int(
+                transformer_parameter_count
+            ),
+            "memory_configuration": dict(
+                self.memory_config
+            ),
+            "load_configuration": dict(
+                self.load_config
+            ),
+        }
 
     def get_intervention_report(
         self,

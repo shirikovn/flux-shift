@@ -58,6 +58,11 @@ def main(config: DictConfig) -> None:
         with manifest.stage("model_prepare"):
             model.prepare_for_inference()
 
+        manifest.add_result(
+            "model",
+            model.get_model_report(),
+        )
+
         pipeline = instantiate(
             config.pipeline,
             model=model,
