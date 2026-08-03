@@ -5,11 +5,17 @@ defaults:
   - pipeline: pooled_vector_collection
   - _self_
 
+seed: 0
 device: cuda
 
 target_prompt: "cyberpunk style"
 
-output_dir: ${hydra:runtime.output_dir}/pooled
+# Root directory for Hydra logs and run_manifest.yaml.
+run_dir: ${hydra:runtime.output_dir}
+
+# Keep the existing nested artifact structure:
+# artifacts/<concept>/pooled/pooled/*.pt
+output_dir: ${run_dir}/pooled
 
 hydra:
   run:

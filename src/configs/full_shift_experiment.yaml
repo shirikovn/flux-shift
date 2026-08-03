@@ -8,6 +8,8 @@ defaults:
 seed: 123
 device: cuda
 
+run_dir: ${hydra:runtime.output_dir}
+
 shift:
   artifacts_root: artifacts/cyberpunk
 
@@ -31,7 +33,7 @@ shift:
   eta_max: 4.0
 
 experiment:
-  output_dir: ${hydra:runtime.output_dir}
+  output_dir: ${run_dir}
 
   strengths:
     - ${shift.dit_gamma}
