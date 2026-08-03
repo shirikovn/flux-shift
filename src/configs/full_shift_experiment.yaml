@@ -35,6 +35,25 @@ shift:
 experiment:
   output_dir: ${run_dir}
 
+  resume:
+    # resume:
+    #   skip valid completed runs and repair corrupt ones
+    #
+    # overwrite:
+    #   regenerate every configured run
+    #
+    # error:
+    #   fail if any expected output already exists
+    mode: resume
+
+    # Open the PNG and compare its stored SHA-256 before
+    # treating it as complete.
+    verify_images: true
+
+    # Automatically delete and regenerate orphaned,
+    # truncated, or inconsistent outputs.
+    repair_incomplete: true
+
   strengths:
     - ${shift.dit_gamma}
 

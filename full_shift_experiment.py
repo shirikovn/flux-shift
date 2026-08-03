@@ -76,6 +76,7 @@ def main(config: DictConfig) -> None:
             output_dir=str(
                 config.experiment.output_dir
             ),
+            resume_config=config.experiment.resume,
             seed=int(config.seed),
             logger=logger,
             _recursive_=False,
