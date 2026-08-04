@@ -10,7 +10,6 @@ from omegaconf import DictConfig, OmegaConf
 from src.utils.init_utils import set_random_seed
 from src.utils.run_manifest import RunManifest
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -32,13 +31,8 @@ def main(config: DictConfig) -> None:
 
     device = torch.device(str(config.device))
 
-    if (
-        device.type == "cuda"
-        and not torch.cuda.is_available()
-    ):
-        raise RuntimeError(
-            "config.device=cuda, but CUDA is unavailable."
-        )
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("config.device=cuda, but CUDA is unavailable.")
 
     with RunManifest(
         output_dir=str(config.run_dir),
@@ -46,9 +40,7 @@ def main(config: DictConfig) -> None:
         config=config,
         device=device,
     ) as manifest:
-        intervention_manager = instantiate(
-            config.intervention
-        )
+        intervention_manager = instantiate(config.intervention)
 
         model = instantiate(
             config.model,
@@ -73,9 +65,7 @@ def main(config: DictConfig) -> None:
             schedules=config.experiment.schedules,
             strengths=config.experiment.strengths,
             generation_config=config.generation,
-            output_dir=str(
-                config.experiment.output_dir
-            ),
+            output_dir=str(config.experiment.output_dir),
             resume_config=config.experiment.resume,
             seed=int(config.seed),
             logger=logger,
@@ -85,9 +75,7 @@ def main(config: DictConfig) -> None:
         with manifest.stage("steering_experiment"):
             results = pipeline.run()
 
-        intervention_report = (
-            model.get_intervention_report()
-        )
+        intervention_report = model.get_intervention_report()
 
         manifest.add_result(
             "experiment",

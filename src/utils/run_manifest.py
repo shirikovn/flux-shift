@@ -14,7 +14,6 @@ from typing import Any, Iterator
 import torch
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
-
 PACKAGE_DISTRIBUTIONS = [
     "torch",
     "diffusers",
@@ -64,9 +63,7 @@ class RunManifest:
 
         if self._uses_cuda():
             torch.cuda.synchronize(self._cuda_index())
-            torch.cuda.reset_peak_memory_stats(
-                self._cuda_index()
-            )
+            torch.cuda.reset_peak_memory_stats(self._cuda_index())
 
         self._manifest = {
             "schema_version": 1,
@@ -78,20 +75,14 @@ class RunManifest:
             "command": {
                 "executable": sys.executable,
                 "arguments": list(sys.argv),
-                "command_line": " ".join(
-                    [sys.executable, *sys.argv]
-                ),
-                "working_directory": str(
-                    Path.cwd().resolve()
-                ),
+                "command_line": " ".join([sys.executable, *sys.argv]),
+                "working_directory": str(Path.cwd().resolve()),
             },
             "git": self._collect_git_info(),
             "environment": self._collect_environment_info(),
             "packages": self._collect_package_versions(),
             "hardware": self._collect_hardware_info(),
-            "configuration": self._to_plain_value(
-                self.config
-            ),
+            "configuration": self._to_plain_value(self.config),
             "stages": {},
             "results": {},
             "resources": {
@@ -118,20 +109,11 @@ class RunManifest:
         if self._start_monotonic is None:
             duration_seconds = None
         else:
-            duration_seconds = (
-                finish_monotonic
-                - self._start_monotonic
-            )
+            duration_seconds = finish_monotonic - self._start_monotonic
 
-        self._manifest["finished_at_utc"] = (
-            self._utc_now()
-        )
-        self._manifest["duration_seconds"] = (
-            duration_seconds
-        )
-        self._manifest["resources"]["cuda_memory"] = (
-            self._collect_cuda_memory()
-        )
+        self._manifest["finished_at_utc"] = self._utc_now()
+        self._manifest["duration_seconds"] = duration_seconds
+        self._manifest["resources"]["cuda_memory"] = self._collect_cuda_memory()
 
         if exc_type is None:
             self._manifest["status"] = "completed"
@@ -159,9 +141,7 @@ class RunManifest:
         stage_name = str(name)
 
         if stage_name in self._manifest["stages"]:
-            raise ValueError(
-                f"Duplicate manifest stage: {stage_name!r}"
-            )
+            raise ValueError(f"Duplicate manifest stage: {stage_name!r}")
 
         self._synchronize_cuda()
 
@@ -185,13 +165,8 @@ class RunManifest:
             self._synchronize_cuda()
 
             stage_record["status"] = "failed"
-            stage_record["finished_at_utc"] = (
-                self._utc_now()
-            )
-            stage_record["duration_seconds"] = (
-                time.perf_counter()
-                - started_monotonic
-            )
+            stage_record["finished_at_utc"] = self._utc_now()
+            stage_record["duration_seconds"] = time.perf_counter() - started_monotonic
             stage_record["error"] = {
                 "type": type(error).__name__,
                 "message": str(error),
@@ -204,10 +179,7 @@ class RunManifest:
 
         stage_record["status"] = "completed"
         stage_record["finished_at_utc"] = self._utc_now()
-        stage_record["duration_seconds"] = (
-            time.perf_counter()
-            - started_monotonic
-        )
+        stage_record["duration_seconds"] = time.perf_counter() - started_monotonic
 
         self._save()
 
@@ -216,16 +188,11 @@ class RunManifest:
         name: str,
         value: Any,
     ) -> None:
-        self._manifest["results"][str(name)] = (
-            self._to_plain_value(value)
-        )
+        self._manifest["results"][str(name)] = self._to_plain_value(value)
         self._save()
 
     def _uses_cuda(self) -> bool:
-        return (
-            self.device.type == "cuda"
-            and torch.cuda.is_available()
-        )
+        return self.device.type == "cuda" and torch.cuda.is_available()
 
     def _cuda_index(self) -> int:
         if self.device.index is not None:
@@ -245,18 +212,10 @@ class RunManifest:
 
         index = self._cuda_index()
 
-        allocated = int(
-            torch.cuda.memory_allocated(index)
-        )
-        reserved = int(
-            torch.cuda.memory_reserved(index)
-        )
-        peak_allocated = int(
-            torch.cuda.max_memory_allocated(index)
-        )
-        peak_reserved = int(
-            torch.cuda.max_memory_reserved(index)
-        )
+        allocated = int(torch.cuda.memory_allocated(index))
+        reserved = int(torch.cuda.memory_reserved(index))
+        peak_allocated = int(torch.cuda.max_memory_allocated(index))
+        peak_reserved = int(torch.cuda.max_memory_reserved(index))
 
         return {
             "device_index": index,
@@ -264,18 +223,10 @@ class RunManifest:
             "reserved_bytes_at_finish": reserved,
             "peak_allocated_bytes": peak_allocated,
             "peak_reserved_bytes": peak_reserved,
-            "allocated_gib_at_finish": (
-                self._bytes_to_gib(allocated)
-            ),
-            "reserved_gib_at_finish": (
-                self._bytes_to_gib(reserved)
-            ),
-            "peak_allocated_gib": (
-                self._bytes_to_gib(peak_allocated)
-            ),
-            "peak_reserved_gib": (
-                self._bytes_to_gib(peak_reserved)
-            ),
+            "allocated_gib_at_finish": (self._bytes_to_gib(allocated)),
+            "reserved_gib_at_finish": (self._bytes_to_gib(reserved)),
+            "peak_allocated_gib": (self._bytes_to_gib(peak_allocated)),
+            "peak_reserved_gib": (self._bytes_to_gib(peak_reserved)),
         }
 
     def _collect_hardware_info(
@@ -289,35 +240,22 @@ class RunManifest:
             "cuda_available": torch.cuda.is_available(),
             "cuda_runtime": torch.version.cuda,
             "cudnn_version": (
-                torch.backends.cudnn.version()
-                if torch.backends.cudnn.is_available()
-                else None
+                torch.backends.cudnn.version() if torch.backends.cudnn.is_available() else None
             ),
             "gpu": None,
         }
 
         if self._uses_cuda():
             index = self._cuda_index()
-            properties = torch.cuda.get_device_properties(
-                index
-            )
+            properties = torch.cuda.get_device_properties(index)
 
             hardware["gpu"] = {
                 "index": index,
                 "name": properties.name,
-                "compute_capability": (
-                    f"{properties.major}."
-                    f"{properties.minor}"
-                ),
-                "total_memory_bytes": int(
-                    properties.total_memory
-                ),
-                "total_memory_gib": self._bytes_to_gib(
-                    int(properties.total_memory)
-                ),
-                "bf16_supported": bool(
-                    torch.cuda.is_bf16_supported()
-                ),
+                "compute_capability": (f"{properties.major}." f"{properties.minor}"),
+                "total_memory_bytes": int(properties.total_memory),
+                "total_memory_gib": self._bytes_to_gib(int(properties.total_memory)),
+                "bf16_supported": bool(torch.cuda.is_bf16_supported()),
             }
 
         return hardware
@@ -326,14 +264,10 @@ class RunManifest:
     def _collect_environment_info() -> dict[str, Any]:
         return {
             "python_version": platform.python_version(),
-            "python_implementation": (
-                platform.python_implementation()
-            ),
+            "python_implementation": (platform.python_implementation()),
             "platform": platform.platform(),
             "operating_system": platform.system(),
-            "operating_system_release": (
-                platform.release()
-            ),
+            "operating_system_release": (platform.release()),
             "machine": platform.machine(),
             "hostname": platform.node(),
         }
@@ -344,9 +278,7 @@ class RunManifest:
 
         for distribution in PACKAGE_DISTRIBUTIONS:
             try:
-                versions[distribution] = metadata.version(
-                    distribution
-                )
+                versions[distribution] = metadata.version(distribution)
             except metadata.PackageNotFoundError:
                 versions[distribution] = None
 
@@ -380,15 +312,7 @@ class RunManifest:
             "--porcelain",
         )
 
-        changed_lines = (
-            []
-            if not status
-            else [
-                line
-                for line in status.splitlines()
-                if line.strip()
-            ]
-        )
+        changed_lines = [] if not status else [line for line in status.splitlines() if line.strip()]
 
         return {
             "available": True,
@@ -422,13 +346,9 @@ class RunManifest:
         return output or None
 
     def _save(self) -> None:
-        temporary_path = self.path.with_suffix(
-            ".yaml.tmp"
-        )
+        temporary_path = self.path.with_suffix(".yaml.tmp")
 
-        plain_manifest = self._to_plain_value(
-            self._manifest
-        )
+        plain_manifest = self._to_plain_value(self._manifest)
 
         OmegaConf.save(
             config=OmegaConf.create(plain_manifest),
@@ -458,39 +378,34 @@ class RunManifest:
             return str(value)
 
         if isinstance(value, dict):
-            return {
-                str(key): cls._to_plain_value(item)
-                for key, item in value.items()
-            }
+            return {str(key): cls._to_plain_value(item) for key, item in value.items()}
 
         if isinstance(value, (list, tuple, set)):
-            return [
-                cls._to_plain_value(item)
-                for item in value
-            ]
+            return [cls._to_plain_value(item) for item in value]
 
-        if isinstance(
-            value,
-            (
-                str,
-                int,
-                float,
-                bool,
-            ),
-        ) or value is None:
+        if (
+            isinstance(
+                value,
+                (
+                    str,
+                    int,
+                    float,
+                    bool,
+                ),
+            )
+            or value is None
+        ):
             return value
 
         return str(value)
 
     @staticmethod
     def _utc_now() -> str:
-        return datetime.now(
-            timezone.utc
-        ).isoformat()
+        return datetime.now(timezone.utc).isoformat()
 
     @staticmethod
     def _bytes_to_gib(value: int) -> float:
         return round(
-            value / (1024 ** 3),
+            value / (1024**3),
             4,
         )

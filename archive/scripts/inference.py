@@ -9,7 +9,6 @@ from omegaconf import DictConfig, OmegaConf
 
 from src.utils.init_utils import set_random_seed
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -31,13 +30,8 @@ def main(config: DictConfig) -> None:
 
     device = torch.device(str(config.device))
 
-    if (
-        device.type == "cuda"
-        and not torch.cuda.is_available()
-    ):
-        raise RuntimeError(
-            "config.device=cuda, but CUDA is unavailable."
-        )
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("config.device=cuda, but CUDA is unavailable.")
 
     if device.type == "cuda":
         logger.info(

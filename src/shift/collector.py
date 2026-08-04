@@ -7,7 +7,6 @@ from typing import Any
 import torch
 from omegaconf import OmegaConf
 
-
 DTYPE_MAP: dict[str, torch.dtype] = {
     "float16": torch.float16,
     "float32": torch.float32,
@@ -45,15 +44,11 @@ class MeanDifferenceCollector:
     ) -> None:
         if tensor_dtype not in DTYPE_MAP:
             raise ValueError(
-                f"Unsupported tensor_dtype="
-                f"{tensor_dtype!r}. "
-                f"Available: {list(DTYPE_MAP)}"
+                f"Unsupported tensor_dtype=" f"{tensor_dtype!r}. " f"Available: {list(DTYPE_MAP)}"
             )
 
         self.save_dir = Path(save_dir)
-        self.tensor_dtype = DTYPE_MAP[
-            tensor_dtype
-        ]
+        self.tensor_dtype = DTYPE_MAP[tensor_dtype]
         self.normalize = bool(normalize)
         self.eps = float(eps)
         self.concept_name = concept_name
@@ -129,36 +124,23 @@ class MeanDifferenceCollector:
             self._add_positive(
                 pair_name=pair_name,
                 location_key=location_key,
-                pair_location_key=(
-                    pair_location_key
-                ),
+                pair_location_key=(pair_location_key),
                 tensor=tensor,
                 timestep=timestep,
             )
 
         else:
-            raise ValueError(
-                f"Unknown prompt role: "
-                f"{prompt_role!r}"
-            )
+            raise ValueError(f"Unknown prompt role: " f"{prompt_role!r}")
 
     def _add_negative(
         self,
         pair_location_key: PairLocationKey,
         tensor: torch.Tensor,
     ) -> None:
-        if (
-            pair_location_key
-            in self._pending_negatives
-        ):
-            raise RuntimeError(
-                "Duplicate negative activation for "
-                f"{pair_location_key}."
-            )
+        if pair_location_key in self._pending_negatives:
+            raise RuntimeError("Duplicate negative activation for " f"{pair_location_key}.")
 
-        self._pending_negatives[
-            pair_location_key
-        ] = tensor
+        self._pending_negatives[pair_location_key] = tensor
 
     def _add_positive(
         self,
@@ -190,42 +172,22 @@ class MeanDifferenceCollector:
         difference = tensor - negative
 
         if not torch.isfinite(difference).all():
-            raise RuntimeError(
-                "The activation difference contains "
-                "NaN or Inf values."
-            )
+            raise RuntimeError("The activation difference contains " "NaN or Inf values.")
 
-        if (
-            location_key
-            not in self._difference_sums
-        ):
-            self._difference_sums[
-                location_key
-            ] = torch.zeros_like(difference)
+        if location_key not in self._difference_sums:
+            self._difference_sums[location_key] = torch.zeros_like(difference)
 
-            self._pair_counts[
-                location_key
-            ] = 0
+            self._pair_counts[location_key] = 0
 
-            self._pair_names[
-                location_key
-            ] = []
+            self._pair_names[location_key] = []
 
-            self._timesteps[
-                location_key
-            ] = timestep
+            self._timesteps[location_key] = timestep
 
-        self._difference_sums[
-            location_key
-        ].add_(difference)
+        self._difference_sums[location_key].add_(difference)
 
-        self._pair_counts[
-            location_key
-        ] += 1
+        self._pair_counts[location_key] += 1
 
-        self._pair_names[
-            location_key
-        ].append(pair_name)
+        self._pair_names[location_key].append(pair_name)
 
     @staticmethod
     def _validate_activation(
@@ -246,101 +208,57 @@ class MeanDifferenceCollector:
 
         if tensor.shape[0] != 1:
             raise RuntimeError(
-                "Stage 3 currently expects "
-                "batch_size=1, got "
-                f"{tensor.shape[0]}."
+                "Stage 3 currently expects " "batch_size=1, got " f"{tensor.shape[0]}."
             )
 
         if not torch.isfinite(tensor).all():
-            raise RuntimeError(
-                "Activation contains NaN or Inf."
-            )
+            raise RuntimeError("Activation contains NaN or Inf.")
 
     def save(self) -> Path:
         if self._pending_negatives:
-            missing = sorted(
-                self._pending_negatives
-            )
+            missing = sorted(self._pending_negatives)
 
             raise RuntimeError(
-                "Some negative activations have no "
-                "matching positive activations: "
-                f"{missing}"
+                "Some negative activations have no " "matching positive activations: " f"{missing}"
             )
 
         if not self._difference_sums:
-            raise RuntimeError(
-                "No activation differences were "
-                "collected."
-            )
+            raise RuntimeError("No activation differences were " "collected.")
 
         self.save_dir.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-        location_metadata: list[
-            dict[str, Any]
-        ] = []
+        location_metadata: list[dict[str, Any]] = []
 
-        for location_key in sorted(
-            self._difference_sums
-        ):
-            block_index, step_index = (
-                location_key
-            )
+        for location_key in sorted(self._difference_sums):
+            block_index, step_index = location_key
 
-            count = self._pair_counts[
-                location_key
-            ]
+            count = self._pair_counts[location_key]
 
             if count <= 0:
-                raise RuntimeError(
-                    "Invalid pair count for "
-                    f"{location_key}: {count}"
-                )
+                raise RuntimeError("Invalid pair count for " f"{location_key}: {count}")
 
-            mean_difference = (
-                self._difference_sums[
-                    location_key
-                ]
-                / count
-            )
+            mean_difference = self._difference_sums[location_key] / count
 
             # Current stage assumes batch size = 1.
-            raw_vector = (
-                mean_difference.squeeze(0)
-            )
+            raw_vector = mean_difference.squeeze(0)
 
-            vector = self._normalize(
-                raw_vector
-            )
+            vector = self._normalize(raw_vector)
 
-            block_dir = (
-                self.save_dir
-                / f"block_{block_index:02d}"
-            )
+            block_dir = self.save_dir / f"block_{block_index:02d}"
             block_dir.mkdir(
                 parents=True,
                 exist_ok=True,
             )
 
-            raw_filename = (
-                f"step_{step_index:02d}"
-                "_raw_difference.pt"
-            )
+            raw_filename = f"step_{step_index:02d}" "_raw_difference.pt"
 
-            vector_filename = (
-                f"step_{step_index:02d}"
-                "_vector.pt"
-            )
+            vector_filename = f"step_{step_index:02d}" "_vector.pt"
 
-            raw_path = (
-                block_dir / raw_filename
-            )
-            vector_path = (
-                block_dir / vector_filename
-            )
+            raw_path = block_dir / raw_filename
+            vector_path = block_dir / vector_filename
 
             torch.save(
                 raw_vector,
@@ -351,98 +269,43 @@ class MeanDifferenceCollector:
                 vector_path,
             )
 
-            token_norms = vector.norm(
-                dim=-1
-            )
+            token_norms = vector.norm(dim=-1)
 
             location_metadata.append(
                 {
-                    "block_index": (
-                        block_index
-                    ),
+                    "block_index": (block_index),
                     "step_index": step_index,
-                    "timestep": (
-                        self._timesteps[
-                            location_key
-                        ]
-                    ),
-                    "num_prompt_pairs": (
-                        count
-                    ),
-                    "pair_names": (
-                        self._pair_names[
-                            location_key
-                        ]
-                    ),
-                    "raw_shape": list(
-                        raw_vector.shape
-                    ),
-                    "vector_shape": list(
-                        vector.shape
-                    ),
-                    "raw_dtype": str(
-                        raw_vector.dtype
-                    ),
-                    "vector_dtype": str(
-                        vector.dtype
-                    ),
-                    "raw_mean_abs": float(
-                        raw_vector
-                        .abs()
-                        .mean()
-                        .item()
-                    ),
-                    "raw_l2_norm": float(
-                        raw_vector
-                        .norm()
-                        .item()
-                    ),
-                    "token_norm_min": float(
-                        token_norms.min().item()
-                    ),
-                    "token_norm_mean": float(
-                        token_norms.mean().item()
-                    ),
-                    "token_norm_max": float(
-                        token_norms.max().item()
-                    ),
-                    "raw_difference_path": (
-                        str(raw_path)
-                    ),
-                    "vector_path": (
-                        str(vector_path)
-                    ),
+                    "timestep": (self._timesteps[location_key]),
+                    "num_prompt_pairs": (count),
+                    "pair_names": (self._pair_names[location_key]),
+                    "raw_shape": list(raw_vector.shape),
+                    "vector_shape": list(vector.shape),
+                    "raw_dtype": str(raw_vector.dtype),
+                    "vector_dtype": str(vector.dtype),
+                    "raw_mean_abs": float(raw_vector.abs().mean().item()),
+                    "raw_l2_norm": float(raw_vector.norm().item()),
+                    "token_norm_min": float(token_norms.min().item()),
+                    "token_norm_mean": float(token_norms.mean().item()),
+                    "token_norm_max": float(token_norms.max().item()),
+                    "raw_difference_path": (str(raw_path)),
+                    "vector_path": (str(vector_path)),
                 }
             )
 
         metadata = {
             "concept_name": self.concept_name,
-            "estimator": (
-                "token_wise_mean_difference"
-            ),
-            "difference_direction": (
-                "positive_minus_negative"
-            ),
-            "normalization": (
-                "per_token_channel_l2"
-                if self.normalize
-                else "none"
-            ),
+            "estimator": ("token_wise_mean_difference"),
+            "difference_direction": ("positive_minus_negative"),
+            "normalization": ("per_token_channel_l2" if self.normalize else "none"),
             "eps": self.eps,
-            "tensor_dtype": str(
-                self.tensor_dtype
-            ),
+            "tensor_dtype": str(self.tensor_dtype),
             "locations": location_metadata,
         }
 
-        metadata_path = (
-            self.save_dir / "metadata.yaml"
-        )
+        metadata_path = self.save_dir / "metadata.yaml"
 
         OmegaConf.save(
-            config=OmegaConf.create(
-                metadata
-            ),
+            config=OmegaConf.create(metadata),
             f=metadata_path,
         )
 
@@ -460,9 +323,7 @@ class MeanDifferenceCollector:
             keepdim=True,
         )
 
-        vector = raw_vector / norms.clamp_min(
-            self.eps
-        )
+        vector = raw_vector / norms.clamp_min(self.eps)
 
         # Truly zero vectors should remain zero.
         vector = torch.where(
@@ -475,31 +336,18 @@ class MeanDifferenceCollector:
 
     def summary(self) -> dict[str, Any]:
         return {
-            "type": (
-                self.__class__.__name__
-            ),
+            "type": (self.__class__.__name__),
             "save_dir": str(self.save_dir),
-            "concept_name": (
-                self.concept_name
-            ),
-            "tensor_dtype": str(
-                self.tensor_dtype
-            ),
+            "concept_name": (self.concept_name),
+            "tensor_dtype": str(self.tensor_dtype),
             "normalize": self.normalize,
-            "num_locations": len(
-                self._difference_sums
-            ),
+            "num_locations": len(self._difference_sums),
             "pair_counts": {
-                (
-                    f"block_{block:02d}"
-                    f"_step_{step:02d}"
-                ): count
+                (f"block_{block:02d}" f"_step_{step:02d}"): count
                 for (
                     block,
                     step,
-                ), count in sorted(
-                    self._pair_counts.items()
-                )
+                ), count in sorted(self._pair_counts.items())
             },
         }
 
@@ -531,8 +379,7 @@ class PooledSVMDatasetCollector:
     ) -> None:
         if tensor_dtype not in DTYPE_MAP:
             raise ValueError(
-                f"Unsupported tensor_dtype={tensor_dtype!r}. "
-                f"Available: {sorted(DTYPE_MAP)}"
+                f"Unsupported tensor_dtype={tensor_dtype!r}. " f"Available: {sorted(DTYPE_MAP)}"
             )
 
         self.save_dir = Path(save_dir)
@@ -551,9 +398,7 @@ class PooledSVMDatasetCollector:
         ] = {}
 
         # Prevent accidental duplicate captures.
-        self._seen: set[
-            tuple[str, str, int, int]
-        ] = set()
+        self._seen: set[tuple[str, str, int, int]] = set()
 
     def add(
         self,
@@ -565,9 +410,7 @@ class PooledSVMDatasetCollector:
         activation: torch.Tensor,
     ) -> None:
         if prompt_role not in self.ROLE_TO_LABEL:
-            raise ValueError(
-                f"Unknown prompt_role={prompt_role!r}."
-            )
+            raise ValueError(f"Unknown prompt_role={prompt_role!r}.")
 
         self._validate_activation(
             activation=activation,
@@ -584,39 +427,26 @@ class PooledSVMDatasetCollector:
         )
 
         if sample_key in self._seen:
-            raise RuntimeError(
-                f"Duplicate SVM sample: {sample_key}"
-            )
+            raise RuntimeError(f"Duplicate SVM sample: {sample_key}")
 
         self._seen.add(sample_key)
 
         # Convert before mean so accumulation is performed in float32
         # in the recommended configuration.
-        cpu_activation = (
-            activation.detach()
-            .to(
-                device="cpu",
-                dtype=self.tensor_dtype,
-            )
+        cpu_activation = activation.detach().to(
+            device="cpu",
+            dtype=self.tensor_dtype,
         )
 
-        pooled = (
-            cpu_activation
-            .mean(dim=1)
-            .squeeze(0)
-            .clone()
-        )
+        pooled = cpu_activation.mean(dim=1).squeeze(0).clone()
 
         if pooled.ndim != 1:
             raise RuntimeError(
-                "Expected pooled activation shape [channels], got "
-                f"{tuple(pooled.shape)}."
+                "Expected pooled activation shape [channels], got " f"{tuple(pooled.shape)}."
             )
 
         if not torch.isfinite(pooled).all():
-            raise RuntimeError(
-                "Pooled activation contains NaN or Inf."
-            )
+            raise RuntimeError("Pooled activation contains NaN or Inf.")
 
         location = (
             int(block_index),
@@ -658,9 +488,7 @@ class PooledSVMDatasetCollector:
         step_index: int,
     ) -> None:
         if not isinstance(activation, torch.Tensor):
-            raise TypeError(
-                f"Expected Tensor, got {type(activation)!r}."
-            )
+            raise TypeError(f"Expected Tensor, got {type(activation)!r}.")
 
         if activation.ndim != 3:
             raise RuntimeError(
@@ -679,24 +507,18 @@ class PooledSVMDatasetCollector:
             )
 
         if not torch.isfinite(activation).all():
-            raise RuntimeError(
-                "Activation contains NaN or Inf."
-            )
+            raise RuntimeError("Activation contains NaN or Inf.")
 
     def save(self) -> Path:
         if not self._features:
-            raise RuntimeError(
-                "No SVM features were collected."
-            )
+            raise RuntimeError("No SVM features were collected.")
 
         self.save_dir.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-        locations_metadata: list[
-            dict[str, Any]
-        ] = []
+        locations_metadata: list[dict[str, Any]] = []
 
         for location in sorted(self._features):
             block_index, step_index = location
@@ -710,38 +532,26 @@ class PooledSVMDatasetCollector:
             )
 
             labels = torch.tensor(
-                [
-                    int(sample["label"])
-                    for sample in sample_list
-                ],
+                [int(sample["label"]) for sample in sample_list],
                 dtype=torch.long,
             )
 
             if features.ndim != 2:
                 raise RuntimeError(
-                    "Expected feature matrix [samples, channels], got "
-                    f"{tuple(features.shape)}."
+                    "Expected feature matrix [samples, channels], got " f"{tuple(features.shape)}."
                 )
 
             if labels.shape != (features.shape[0],):
                 raise RuntimeError(
-                    "Feature and label counts differ: "
-                    f"{features.shape[0]} != {labels.shape[0]}."
+                    "Feature and label counts differ: " f"{features.shape[0]} != {labels.shape[0]}."
                 )
 
-            class_counts = Counter(
-                labels.tolist()
-            )
+            class_counts = Counter(labels.tolist())
 
             if set(class_counts) != {0, 1}:
-                raise RuntimeError(
-                    f"Both classes are required, got {class_counts}."
-                )
+                raise RuntimeError(f"Both classes are required, got {class_counts}.")
 
-            location_dir = (
-                self.save_dir
-                / f"block_{block_index:02d}"
-            )
+            location_dir = self.save_dir / f"block_{block_index:02d}"
 
             location_dir.mkdir(
                 parents=True,
@@ -750,20 +560,11 @@ class PooledSVMDatasetCollector:
 
             prefix = f"step_{step_index:02d}"
 
-            features_path = (
-                location_dir
-                / f"{prefix}_features.pt"
-            )
+            features_path = location_dir / f"{prefix}_features.pt"
 
-            labels_path = (
-                location_dir
-                / f"{prefix}_labels.pt"
-            )
+            labels_path = location_dir / f"{prefix}_labels.pt"
 
-            samples_path = (
-                location_dir
-                / f"{prefix}_samples.yaml"
-            )
+            samples_path = location_dir / f"{prefix}_samples.yaml"
 
             torch.save(
                 features,
@@ -784,86 +585,43 @@ class PooledSVMDatasetCollector:
                 f=samples_path,
             )
 
-            feature_norms = features.norm(
-                dim=-1
-            )
+            feature_norms = features.norm(dim=-1)
 
-            pair_names = sorted(
-                {
-                    str(sample["pair_name"])
-                    for sample in sample_list
-                }
-            )
+            pair_names = sorted({str(sample["pair_name"]) for sample in sample_list})
 
             locations_metadata.append(
                 {
                     "block_index": block_index,
                     "step_index": step_index,
-                    "num_samples": int(
-                        features.shape[0]
-                    ),
-                    "num_features": int(
-                        features.shape[1]
-                    ),
+                    "num_samples": int(features.shape[0]),
+                    "num_features": int(features.shape[1]),
                     "num_pairs": len(pair_names),
                     "pair_names": pair_names,
                     "class_counts": {
-                        "negative": int(
-                            class_counts[0]
-                        ),
-                        "positive": int(
-                            class_counts[1]
-                        ),
+                        "negative": int(class_counts[0]),
+                        "positive": int(class_counts[1]),
                     },
-                    "dtype": str(
-                        features.dtype
-                    ),
-                    "feature_mean_abs": float(
-                        features
-                        .abs()
-                        .mean()
-                        .item()
-                    ),
-                    "feature_norm_min": float(
-                        feature_norms.min().item()
-                    ),
-                    "feature_norm_mean": float(
-                        feature_norms.mean().item()
-                    ),
-                    "feature_norm_max": float(
-                        feature_norms.max().item()
-                    ),
-                    "features_path": str(
-                        features_path
-                    ),
-                    "labels_path": str(
-                        labels_path
-                    ),
-                    "samples_path": str(
-                        samples_path
-                    ),
+                    "dtype": str(features.dtype),
+                    "feature_mean_abs": float(features.abs().mean().item()),
+                    "feature_norm_min": float(feature_norms.min().item()),
+                    "feature_norm_mean": float(feature_norms.mean().item()),
+                    "feature_norm_max": float(feature_norms.max().item()),
+                    "features_path": str(features_path),
+                    "labels_path": str(labels_path),
+                    "samples_path": str(samples_path),
                 }
             )
 
         metadata = {
             "concept_name": self.concept_name,
-            "dataset_type": (
-                "token_averaged_dit_activations"
-            ),
+            "dataset_type": ("token_averaged_dit_activations"),
             "pooling": "mean_over_text_tokens",
-            "tensor_dtype": str(
-                self.tensor_dtype
-            ),
-            "num_locations": len(
-                locations_metadata
-            ),
+            "tensor_dtype": str(self.tensor_dtype),
+            "num_locations": len(locations_metadata),
             "locations": locations_metadata,
         }
 
-        metadata_path = (
-            self.save_dir
-            / "metadata.yaml"
-        )
+        metadata_path = self.save_dir / "metadata.yaml"
 
         OmegaConf.save(
             config=OmegaConf.create(metadata),
@@ -877,20 +635,13 @@ class PooledSVMDatasetCollector:
             "type": self.__class__.__name__,
             "save_dir": str(self.save_dir),
             "concept_name": self.concept_name,
-            "num_locations": len(
-                self._features
-            ),
+            "num_locations": len(self._features),
             "sample_counts": {
-                (
-                    f"block_{block:02d}"
-                    f"_step_{step:02d}"
-                ): len(features)
+                (f"block_{block:02d}" f"_step_{step:02d}"): len(features)
                 for (
                     block,
                     step,
-                ), features in sorted(
-                    self._features.items()
-                )
+                ), features in sorted(self._features.items())
             },
         }
 
@@ -924,35 +675,24 @@ class CombinedDiTCollector:
         self.eps = float(eps)
 
         if self.eps <= 0:
-            raise ValueError(
-                "eps must be positive."
-            )
+            raise ValueError("eps must be positive.")
 
         # Child collectors are constructed here rather than
         # through nested Hydra configs. This keeps the
         # intervention config small and avoids recursive
         # instantiation issues.
-        self.vector_collector = (
-            MeanDifferenceCollector(
-                save_dir=str(
-                    self.save_dir / "vectors"
-                ),
-                tensor_dtype=self.tensor_dtype,
-                concept_name=self.concept_name,
-                normalize=self.normalize,
-                eps=self.eps,
-            )
+        self.vector_collector = MeanDifferenceCollector(
+            save_dir=str(self.save_dir / "vectors"),
+            tensor_dtype=self.tensor_dtype,
+            concept_name=self.concept_name,
+            normalize=self.normalize,
+            eps=self.eps,
         )
 
-        self.svm_collector = (
-            PooledSVMDatasetCollector(
-                save_dir=str(
-                    self.save_dir
-                    / "svm_dataset"
-                ),
-                tensor_dtype=self.tensor_dtype,
-                concept_name=self.concept_name,
-            )
+        self.svm_collector = PooledSVMDatasetCollector(
+            save_dir=str(self.save_dir / "svm_dataset"),
+            tensor_dtype=self.tensor_dtype,
+            concept_name=self.concept_name,
         )
 
         self.total_add_calls = 0
@@ -975,10 +715,7 @@ class CombinedDiTCollector:
 
         No second FLUX generation is needed.
         """
-        location = (
-            f"block_{int(block_index):02d}"
-            f"_step_{int(step_index):02d}"
-        )
+        location = f"block_{int(block_index):02d}" f"_step_{int(step_index):02d}"
 
         # Both collectors receive the same activation.
         #
@@ -1024,71 +761,34 @@ class CombinedDiTCollector:
             exist_ok=True,
         )
 
-        vectors_metadata_path = (
-            self.vector_collector.save()
-        )
+        vectors_metadata_path = self.vector_collector.save()
 
-        svm_metadata_path = (
-            self.svm_collector.save()
-        )
+        svm_metadata_path = self.svm_collector.save()
 
         combined_metadata = {
-            "collector_type": (
-                self.__class__.__name__
-            ),
-            "concept_name": (
-                self.concept_name
-            ),
-            "tensor_dtype": (
-                self.tensor_dtype
-            ),
-            "normalize_vectors": (
-                self.normalize
-            ),
+            "collector_type": (self.__class__.__name__),
+            "concept_name": (self.concept_name),
+            "tensor_dtype": (self.tensor_dtype),
+            "normalize_vectors": (self.normalize),
             "eps": self.eps,
-            "total_add_calls": (
-                self.total_add_calls
-            ),
-            "calls_by_location": dict(
-                self.calls_by_location
-            ),
+            "total_add_calls": (self.total_add_calls),
+            "calls_by_location": dict(self.calls_by_location),
             "artifacts": {
-                "vectors_directory": str(
-                    self.save_dir
-                    / "vectors"
-                ),
-                "vectors_metadata": str(
-                    vectors_metadata_path
-                ),
-                "svm_dataset_directory": str(
-                    self.save_dir
-                    / "svm_dataset"
-                ),
-                "svm_dataset_metadata": str(
-                    svm_metadata_path
-                ),
+                "vectors_directory": str(self.save_dir / "vectors"),
+                "vectors_metadata": str(vectors_metadata_path),
+                "svm_dataset_directory": str(self.save_dir / "svm_dataset"),
+                "svm_dataset_metadata": str(svm_metadata_path),
             },
             "collectors": {
-                "vectors": (
-                    self.vector_collector
-                    .summary()
-                ),
-                "svm_dataset": (
-                    self.svm_collector
-                    .summary()
-                ),
+                "vectors": (self.vector_collector.summary()),
+                "svm_dataset": (self.svm_collector.summary()),
             },
         }
 
-        metadata_path = (
-            self.save_dir
-            / "metadata.yaml"
-        )
+        metadata_path = self.save_dir / "metadata.yaml"
 
         OmegaConf.save(
-            config=OmegaConf.create(
-                combined_metadata
-            ),
+            config=OmegaConf.create(combined_metadata),
             f=metadata_path,
         )
 
@@ -1096,33 +796,13 @@ class CombinedDiTCollector:
 
     def summary(self) -> dict[str, Any]:
         return {
-            "type": (
-                self.__class__.__name__
-            ),
-            "save_dir": str(
-                self.save_dir
-            ),
-            "concept_name": (
-                self.concept_name
-            ),
-            "tensor_dtype": (
-                self.tensor_dtype
-            ),
-            "normalize_vectors": (
-                self.normalize
-            ),
-            "total_add_calls": (
-                self.total_add_calls
-            ),
-            "calls_by_location": dict(
-                self.calls_by_location
-            ),
-            "vectors": (
-                self.vector_collector
-                .summary()
-            ),
-            "svm_dataset": (
-                self.svm_collector
-                .summary()
-            ),
+            "type": (self.__class__.__name__),
+            "save_dir": str(self.save_dir),
+            "concept_name": (self.concept_name),
+            "tensor_dtype": (self.tensor_dtype),
+            "normalize_vectors": (self.normalize),
+            "total_add_calls": (self.total_add_calls),
+            "calls_by_location": dict(self.calls_by_location),
+            "vectors": (self.vector_collector.summary()),
+            "svm_dataset": (self.svm_collector.summary()),
         }

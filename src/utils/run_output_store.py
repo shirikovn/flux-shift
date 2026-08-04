@@ -53,13 +53,9 @@ class RunOutputStore:
 
         config_dict = self._to_dict(config)
 
-        self.mode = str(
-            config_dict.get("mode", "resume")
-        ).strip().lower()
+        self.mode = str(config_dict.get("mode", "resume")).strip().lower()
 
-        self.verify_images = bool(
-            config_dict.get("verify_images", True)
-        )
+        self.verify_images = bool(config_dict.get("verify_images", True))
 
         self.repair_incomplete = bool(
             config_dict.get(
@@ -97,9 +93,7 @@ class RunOutputStore:
             )
 
             if not isinstance(value, dict):
-                raise TypeError(
-                    "Resume configuration must be a mapping."
-                )
+                raise TypeError("Resume configuration must be a mapping.")
 
             return value
 
@@ -113,9 +107,7 @@ class RunOutputStore:
         """
         Return a stable SHA-256 hash of a run specification.
         """
-        plain_specification = cls._to_plain_value(
-            specification
-        )
+        plain_specification = cls._to_plain_value(specification)
 
         serialized = json.dumps(
             plain_specification,
@@ -132,23 +124,13 @@ class RunOutputStore:
         filename: str,
     ) -> RunOutputPaths:
         image_path = self.images_dir / filename
-        record_path = (
-            self.records_dir / f"{run_id}.yaml"
-        )
+        record_path = self.records_dir / f"{run_id}.yaml"
 
         return RunOutputPaths(
             image_path=image_path,
             record_path=record_path,
-            image_relative_path=str(
-                image_path.relative_to(
-                    self.output_dir
-                )
-            ),
-            record_relative_path=str(
-                record_path.relative_to(
-                    self.output_dir
-                )
-            ),
+            image_relative_path=str(image_path.relative_to(self.output_dir)),
+            record_relative_path=str(record_path.relative_to(self.output_dir)),
         )
 
     def prepare(
@@ -186,31 +168,23 @@ class RunOutputStore:
             # Remove the completion marker before generation.
             # If generation is interrupted, the old image alone
             # will not be treated as a completed run.
-            paths.record_path.unlink(
-                missing_ok=True
-            )
+            paths.record_path.unlink(missing_ok=True)
 
             return (
                 None,
-                "overwritten"
-                if image_exists or record_exists
-                else "generated",
+                "overwritten" if image_exists or record_exists else "generated",
             )
 
         # Resume mode.
         if record_exists:
             try:
-                record = self._load_record(
-                    paths.record_path
-                )
+                record = self._load_record(paths.record_path)
 
                 self._validate_completed_record(
                     record=record,
                     paths=paths,
                     run_id=run_id,
-                    specification_hash=(
-                        specification_hash
-                    ),
+                    specification_hash=(specification_hash),
                     specification=specification,
                 )
 
@@ -222,9 +196,7 @@ class RunOutputStore:
                 )
 
             resumed_record = dict(record)
-            resumed_record["resume_action"] = (
-                "skipped_existing"
-            )
+            resumed_record["resume_action"] = "skipped_existing"
 
             self.logger.info(
                 "Skipping completed run: %s",
@@ -240,10 +212,7 @@ class RunOutputStore:
             return self._handle_incomplete(
                 paths=paths,
                 run_id=run_id,
-                reason=(
-                    "Image exists but its completed record "
-                    "is missing."
-                ),
+                reason=("Image exists but its completed record " "is missing."),
             )
 
         return None, "generated"
@@ -255,10 +224,7 @@ class RunOutputStore:
         reason: str,
     ) -> tuple[None, str]:
         if not self.repair_incomplete:
-            raise RuntimeError(
-                f"Incomplete output for run_id={run_id}: "
-                f"{reason}"
-            )
+            raise RuntimeError(f"Incomplete output for run_id={run_id}: " f"{reason}")
 
         self.logger.warning(
             "Repairing incomplete run %s: %s",
@@ -266,12 +232,8 @@ class RunOutputStore:
             reason,
         )
 
-        paths.record_path.unlink(
-            missing_ok=True
-        )
-        paths.image_path.unlink(
-            missing_ok=True
-        )
+        paths.record_path.unlink(missing_ok=True)
+        paths.image_path.unlink(missing_ok=True)
 
         return None, "repaired"
 
@@ -289,9 +251,7 @@ class RunOutputStore:
         mode sees an orphan image and regenerates it.
         """
         image_bytes = self._serialize_png(image)
-        image_sha256 = hashlib.sha256(
-            image_bytes
-        ).hexdigest()
+        image_sha256 = hashlib.sha256(image_bytes).hexdigest()
 
         self.atomic_write_bytes(
             path=paths.image_path,
@@ -301,9 +261,7 @@ class RunOutputStore:
         completed_record = dict(record)
         completed_record["status"] = "completed"
         completed_record["image"] = {
-            "relative_path": (
-                paths.image_relative_path
-            ),
+            "relative_path": (paths.image_relative_path),
             "sha256": image_sha256,
             "size_bytes": len(image_bytes),
             "width": int(image.width),
@@ -328,87 +286,46 @@ class RunOutputStore:
         specification: dict[str, Any],
     ) -> None:
         if record.get("status") != "completed":
-            raise RuntimeError(
-                "Record status is not completed."
-            )
+            raise RuntimeError("Record status is not completed.")
 
         if record.get("run_id") != run_id:
-            raise RuntimeError(
-                "Record run_id does not match."
-            )
+            raise RuntimeError("Record run_id does not match.")
 
-        if (
-            record.get("specification_hash")
-            != specification_hash
-        ):
-            raise RuntimeError(
-                "Run specification hash does not match."
-            )
+        if record.get("specification_hash") != specification_hash:
+            raise RuntimeError("Run specification hash does not match.")
 
-        if (
-            self._to_plain_value(
-                record.get("specification")
-            )
-            != self._to_plain_value(
-                specification
-            )
-        ):
-            raise RuntimeError(
-                "Stored run specification does not match."
-            )
+        if self._to_plain_value(record.get("specification")) != self._to_plain_value(specification):
+            raise RuntimeError("Stored run specification does not match.")
 
         image_record = record.get("image")
 
         if not isinstance(image_record, dict):
-            raise RuntimeError(
-                "Record has no image metadata."
-            )
+            raise RuntimeError("Record has no image metadata.")
 
-        if (
-            image_record.get("relative_path")
-            != paths.image_relative_path
-        ):
-            raise RuntimeError(
-                "Stored image path does not match."
-            )
+        if image_record.get("relative_path") != paths.image_relative_path:
+            raise RuntimeError("Stored image path does not match.")
 
         if not paths.image_path.is_file():
-            raise RuntimeError(
-                "Completed record exists, but image "
-                "file is missing."
-            )
+            raise RuntimeError("Completed record exists, but image " "file is missing.")
 
         if not self.verify_images:
             return
 
         self._verify_png(paths.image_path)
 
-        expected_size = image_record.get(
-            "size_bytes"
-        )
+        expected_size = image_record.get("size_bytes")
 
         actual_size = paths.image_path.stat().st_size
 
-        if (
-            expected_size is not None
-            and int(expected_size) != actual_size
-        ):
-            raise RuntimeError(
-                "Image size does not match its record."
-            )
+        if expected_size is not None and int(expected_size) != actual_size:
+            raise RuntimeError("Image size does not match its record.")
 
-        expected_sha256 = image_record.get(
-            "sha256"
-        )
+        expected_sha256 = image_record.get("sha256")
 
-        actual_sha256 = self.sha256_file(
-            paths.image_path
-        )
+        actual_sha256 = self.sha256_file(paths.image_path)
 
         if expected_sha256 != actual_sha256:
-            raise RuntimeError(
-                "Image SHA-256 does not match its record."
-            )
+            raise RuntimeError("Image SHA-256 does not match its record.")
 
     @staticmethod
     def _verify_png(path: Path) -> None:
@@ -417,14 +334,10 @@ class RunOutputStore:
                 image_format = image.format
                 image.verify()
         except Exception as error:
-            raise RuntimeError(
-                f"Invalid image file: {path}"
-            ) from error
+            raise RuntimeError(f"Invalid image file: {path}") from error
 
         if image_format != "PNG":
-            raise RuntimeError(
-                f"Expected PNG, received {image_format!r}."
-            )
+            raise RuntimeError(f"Expected PNG, received {image_format!r}.")
 
     @staticmethod
     def _serialize_png(
@@ -466,10 +379,7 @@ class RunOutputStore:
             exist_ok=True,
         )
 
-        temporary_path = destination.with_name(
-            f".{destination.name}."
-            f"{uuid.uuid4().hex}.tmp"
-        )
+        temporary_path = destination.with_name(f".{destination.name}." f"{uuid.uuid4().hex}.tmp")
 
         try:
             with temporary_path.open("xb") as file:
@@ -482,14 +392,10 @@ class RunOutputStore:
                 destination,
             )
 
-            RunOutputStore._fsync_directory(
-                destination.parent
-            )
+            RunOutputStore._fsync_directory(destination.parent)
 
         finally:
-            temporary_path.unlink(
-                missing_ok=True
-            )
+            temporary_path.unlink(missing_ok=True)
 
     @staticmethod
     def _fsync_directory(
@@ -546,9 +452,7 @@ class RunOutputStore:
         )
 
         if not isinstance(value, dict):
-            raise TypeError(
-                f"Run record is not a mapping: {path}"
-            )
+            raise TypeError(f"Run record is not a mapping: {path}")
 
         return value
 
@@ -570,29 +474,26 @@ class RunOutputStore:
             return str(value)
 
         if isinstance(value, dict):
-            return {
-                str(key): cls._to_plain_value(item)
-                for key, item in value.items()
-            }
+            return {str(key): cls._to_plain_value(item) for key, item in value.items()}
 
         if isinstance(
             value,
             (list, tuple, set),
         ):
-            return [
-                cls._to_plain_value(item)
-                for item in value
-            ]
+            return [cls._to_plain_value(item) for item in value]
 
-        if isinstance(
-            value,
-            (
-                str,
-                int,
-                float,
-                bool,
-            ),
-        ) or value is None:
+        if (
+            isinstance(
+                value,
+                (
+                    str,
+                    int,
+                    float,
+                    bool,
+                ),
+            )
+            or value is None
+        ):
             return value
 
         return str(value)

@@ -41,24 +41,12 @@ class BaselineInferencePipeline:
 
         generation_kwargs: dict[str, Any] = {
             "prompt": self.prompt,
-            "width": int(
-                self.generation_config.width
-            ),
-            "height": int(
-                self.generation_config.height
-            ),
-            "num_inference_steps": int(
-                self.generation_config.num_inference_steps
-            ),
-            "guidance_scale": float(
-                self.generation_config.guidance_scale
-            ),
-            "max_sequence_length": int(
-                self.generation_config.max_sequence_length
-            ),
-            "num_images_per_prompt": int(
-                self.generation_config.num_images_per_prompt
-            ),
+            "width": int(self.generation_config.width),
+            "height": int(self.generation_config.height),
+            "num_inference_steps": int(self.generation_config.num_inference_steps),
+            "guidance_scale": float(self.generation_config.guidance_scale),
+            "max_sequence_length": int(self.generation_config.max_sequence_length),
+            "num_images_per_prompt": int(self.generation_config.num_images_per_prompt),
             "generator": generator,
             "output_type": "pil",
         }
@@ -94,17 +82,13 @@ class BaselineInferencePipeline:
         self,
         images: list[Any],
     ) -> list[Path]:
-        output_directory = Path(
-            str(self.output_config.directory)
-        )
+        output_directory = Path(str(self.output_config.directory))
         output_directory.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-        configured_filename = Path(
-            str(self.output_config.filename)
-        )
+        configured_filename = Path(str(self.output_config.filename))
 
         output_paths: list[Path] = []
 
@@ -112,13 +96,8 @@ class BaselineInferencePipeline:
             if len(images) == 1:
                 filename = configured_filename
             else:
-                filename = (
-                    configured_filename.parent
-                    / (
-                        f"{configured_filename.stem}"
-                        f"_{index:03d}"
-                        f"{configured_filename.suffix}"
-                    )
+                filename = configured_filename.parent / (
+                    f"{configured_filename.stem}" f"_{index:03d}" f"{configured_filename.suffix}"
                 )
 
             output_path = output_directory / filename
@@ -132,9 +111,7 @@ class BaselineInferencePipeline:
         self,
         output_paths: list[Path],
     ) -> None:
-        output_directory = Path(
-            str(self.output_config.directory)
-        )
+        output_directory = Path(str(self.output_config.directory))
 
         metadata: dict[str, Any] = {
             "model": {
@@ -143,36 +120,21 @@ class BaselineInferencePipeline:
                 "memory": self.model.memory_config,
                 "load": self.model.load_config,
             },
-            "intervention": (
-                self.model.get_intervention_report()
-            ),
+            "intervention": (self.model.get_intervention_report()),
             "prompt": self.prompt,
             "seed": self.seed,
             "generation": OmegaConf.to_container(
                 self.generation_config,
                 resolve=True,
             ),
-            "output_files": [
-                str(path.name)
-                for path in output_paths
-            ],
+            "output_files": [str(path.name) for path in output_paths],
             "environment": {
                 "python_packages": {
-                    "torch": self._package_version(
-                        "torch"
-                    ),
-                    "diffusers": self._package_version(
-                        "diffusers"
-                    ),
-                    "transformers": self._package_version(
-                        "transformers"
-                    ),
-                    "accelerate": self._package_version(
-                        "accelerate"
-                    ),
-                    "hydra-core": self._package_version(
-                        "hydra-core"
-                    ),
+                    "torch": self._package_version("torch"),
+                    "diffusers": self._package_version("diffusers"),
+                    "transformers": self._package_version("transformers"),
+                    "accelerate": self._package_version("accelerate"),
+                    "hydra-core": self._package_version("hydra-core"),
                 },
                 "cuda_runtime": torch.version.cuda,
                 "cuda_available": torch.cuda.is_available(),
@@ -180,27 +142,17 @@ class BaselineInferencePipeline:
         }
 
         if torch.cuda.is_available():
-            metadata["environment"]["gpu"] = (
-                torch.cuda.get_device_name(0)
-            )
-            metadata["environment"][
-                "peak_memory_allocated_gb"
-            ] = round(
-                torch.cuda.max_memory_allocated()
-                / 1024**3,
+            metadata["environment"]["gpu"] = torch.cuda.get_device_name(0)
+            metadata["environment"]["peak_memory_allocated_gb"] = round(
+                torch.cuda.max_memory_allocated() / 1024**3,
                 3,
             )
-            metadata["environment"][
-                "peak_memory_reserved_gb"
-            ] = round(
-                torch.cuda.max_memory_reserved()
-                / 1024**3,
+            metadata["environment"]["peak_memory_reserved_gb"] = round(
+                torch.cuda.max_memory_reserved() / 1024**3,
                 3,
             )
 
-        metadata_path = (
-            output_directory / "run_metadata.yaml"
-        )
+        metadata_path = output_directory / "run_metadata.yaml"
 
         OmegaConf.save(
             config=OmegaConf.create(metadata),
@@ -217,8 +169,6 @@ class BaselineInferencePipeline:
         package_name: str,
     ) -> str | None:
         try:
-            return importlib.metadata.version(
-                package_name
-            )
+            return importlib.metadata.version(package_name)
         except importlib.metadata.PackageNotFoundError:
             return None

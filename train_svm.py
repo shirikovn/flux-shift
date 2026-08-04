@@ -10,7 +10,6 @@ from omegaconf import DictConfig, OmegaConf
 from src.utils.init_utils import set_random_seed
 from src.utils.run_manifest import RunManifest
 
-
 logger = logging.getLogger(__name__)
 
 

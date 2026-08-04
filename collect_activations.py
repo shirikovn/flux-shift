@@ -10,7 +10,6 @@ from omegaconf import DictConfig, OmegaConf
 from src.utils.init_utils import set_random_seed
 from src.utils.run_manifest import RunManifest
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -32,13 +31,8 @@ def main(config: DictConfig) -> None:
 
     device = torch.device(str(config.device))
 
-    if (
-        device.type == "cuda"
-        and not torch.cuda.is_available()
-    ):
-        raise RuntimeError(
-            "config.device=cuda, but CUDA is unavailable."
-        )
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("config.device=cuda, but CUDA is unavailable.")
 
     if device.type == "cuda":
         logger.info(
@@ -56,9 +50,7 @@ def main(config: DictConfig) -> None:
         config=config,
         device=device,
     ) as manifest:
-        intervention_manager = instantiate(
-            config.intervention
-        )
+        intervention_manager = instantiate(config.intervention)
         dataset = instantiate(config.dataset)
 
         model = instantiate(
@@ -91,9 +83,7 @@ def main(config: DictConfig) -> None:
         with manifest.stage("activation_collection"):
             results = pipeline.collect()
 
-        intervention_report = (
-            model.get_intervention_report()
-        )
+        intervention_report = model.get_intervention_report()
 
         manifest.add_result(
             "collection",
@@ -114,9 +104,7 @@ def main(config: DictConfig) -> None:
         logger.info(
             "Intervention report:\n%s",
             OmegaConf.to_yaml(
-                OmegaConf.create(
-                    intervention_report
-                ),
+                OmegaConf.create(intervention_report),
                 resolve=True,
             ),
         )

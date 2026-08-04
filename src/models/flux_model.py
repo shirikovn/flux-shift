@@ -7,16 +7,14 @@ import torch
 from diffusers import FluxPipeline
 from omegaconf import DictConfig, OmegaConf
 
-
 DTYPES: dict[str, torch.dtype] = {
     "float16": torch.float16,
     "bfloat16": torch.bfloat16,
     "float32": torch.float32,
 }
 
-COMMIT_SHA_PATTERN = re.compile(
-    r"^[0-9a-fA-F]{40}$"
-)
+COMMIT_SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
+
 
 class FluxModel:
     """
@@ -42,13 +40,9 @@ class FluxModel:
         self.memory_config = self._to_dict(memory)
         self.load_config = self._to_dict(load)
 
-        self.model_revision = (
-            self._resolve_model_revision()
-        )
+        self.model_revision = self._resolve_model_revision()
 
-        self.intervention_manager = (
-            intervention_manager
-        )
+        self.intervention_manager = intervention_manager
 
         self._pipeline: FluxPipeline | None = None
 
@@ -63,9 +57,7 @@ class FluxModel:
             )
 
             if not isinstance(value, dict):
-                raise TypeError(
-                    "Expected a mapping configuration."
-                )
+                raise TypeError("Expected a mapping configuration.")
 
             return value
 
@@ -79,16 +71,13 @@ class FluxModel:
             return DTYPES[dtype_name]
         except KeyError as error:
             raise ValueError(
-                f"Unsupported dtype: {dtype_name!r}. "
-                f"Available values: {list(DTYPES)}"
+                f"Unsupported dtype: {dtype_name!r}. " f"Available values: {list(DTYPES)}"
             ) from error
 
     def _resolve_model_revision(
         self,
     ) -> str | None:
-        revision = self.load_config.get(
-            "revision"
-        )
+        revision = self.load_config.get("revision")
 
         require_pinned_revision = bool(
             self.load_config.get(
@@ -100,8 +89,7 @@ class FluxModel:
         if revision is None:
             if require_pinned_revision:
                 raise ValueError(
-                    "load.require_pinned_revision=true, "
-                    "but load.revision is missing."
+                    "load.require_pinned_revision=true, " "but load.revision is missing."
                 )
 
             return None
@@ -111,19 +99,12 @@ class FluxModel:
         if not revision_string:
             if require_pinned_revision:
                 raise ValueError(
-                    "load.require_pinned_revision=true, "
-                    "but load.revision is empty."
+                    "load.require_pinned_revision=true, " "but load.revision is empty."
                 )
 
             return None
 
-        if (
-            require_pinned_revision
-            and COMMIT_SHA_PATTERN.fullmatch(
-                revision_string
-            )
-            is None
-        ):
+        if require_pinned_revision and COMMIT_SHA_PATTERN.fullmatch(revision_string) is None:
             raise ValueError(
                 "A reproducible model run requires an "
                 "exact 40-character Git commit SHA. "
@@ -182,9 +163,7 @@ class FluxModel:
         }
 
         if self.model_revision is not None:
-            load_kwargs["revision"] = (
-                self.model_revision
-            )
+            load_kwargs["revision"] = self.model_revision
 
         return FluxPipeline.from_pretrained(
             self.repo_id,
@@ -221,24 +200,16 @@ class FluxModel:
 
         elif strategy == "cuda":
             if self.device.type != "cuda":
-                raise ValueError(
-                    "memory.strategy=cuda requires "
-                    "device=cuda."
-                )
+                raise ValueError("memory.strategy=cuda requires " "device=cuda.")
 
             pipeline.to(self.device)
 
         else:
-            raise ValueError(
-                f"Unknown memory strategy: {strategy!r}"
-            )
+            raise ValueError(f"Unknown memory strategy: {strategy!r}")
 
     def get_pipeline(self) -> FluxPipeline:
         if self._pipeline is None:
-            raise RuntimeError(
-                "FLUX is not initialized. "
-                "Call prepare_for_inference() first."
-            )
+            raise RuntimeError("FLUX is not initialized. " "Call prepare_for_inference() first.")
 
         return self._pipeline
 
@@ -266,59 +237,33 @@ class FluxModel:
         )
 
         transformer_parameter_count = sum(
-            parameter.numel()
-            for parameter in transformer.parameters()
+            parameter.numel() for parameter in transformer.parameters()
         )
 
         return {
             "repo_id": self.repo_id,
             "revision": self.model_revision,
             "revision_is_commit_sha": bool(
-                self.model_revision
-                and COMMIT_SHA_PATTERN.fullmatch(
-                    self.model_revision
-                )
+                self.model_revision and COMMIT_SHA_PATTERN.fullmatch(self.model_revision)
             ),
             "dtype": str(self.dtype),
-            "pipeline_class": (
-                type(pipeline).__name__
-            ),
-            "transformer_class": (
-                type(transformer).__name__
-            ),
-            "scheduler_class": (
-                type(pipeline.scheduler).__name__
-            ),
+            "pipeline_class": (type(pipeline).__name__),
+            "transformer_class": (type(transformer).__name__),
+            "scheduler_class": (type(pipeline.scheduler).__name__),
             "text_encoder_class": (
-                type(pipeline.text_encoder).__name__
-                if pipeline.text_encoder is not None
-                else None
+                type(pipeline.text_encoder).__name__ if pipeline.text_encoder is not None else None
             ),
             "text_encoder_2_class": (
                 type(pipeline.text_encoder_2).__name__
                 if pipeline.text_encoder_2 is not None
                 else None
             ),
-            "vae_class": (
-                type(pipeline.vae).__name__
-                if pipeline.vae is not None
-                else None
-            ),
-            "num_double_stream_blocks": len(
-                double_stream_blocks
-            ),
-            "num_single_stream_blocks": len(
-                single_stream_blocks
-            ),
-            "transformer_parameter_count": int(
-                transformer_parameter_count
-            ),
-            "memory_configuration": dict(
-                self.memory_config
-            ),
-            "load_configuration": dict(
-                self.load_config
-            ),
+            "vae_class": (type(pipeline.vae).__name__ if pipeline.vae is not None else None),
+            "num_double_stream_blocks": len(double_stream_blocks),
+            "num_single_stream_blocks": len(single_stream_blocks),
+            "transformer_parameter_count": int(transformer_parameter_count),
+            "memory_configuration": dict(self.memory_config),
+            "load_configuration": dict(self.load_config),
         }
 
     def get_intervention_report(
@@ -369,12 +314,8 @@ class FluxModel:
             ) = pipe.encode_prompt(
                 prompt=prompt,
                 device=self.device,
-                num_images_per_prompt=(
-                    num_images_per_prompt
-                ),
-                max_sequence_length=(
-                    max_sequence_length
-                ),
+                num_images_per_prompt=(num_images_per_prompt),
+                max_sequence_length=(max_sequence_length),
             )
 
         return (
@@ -382,7 +323,6 @@ class FluxModel:
             pooled_prompt_embeds,
             text_ids,
         )
-
 
     def encode_pooled_prompt(
         self,

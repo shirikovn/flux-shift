@@ -43,35 +43,19 @@ class PooledSteeringController:
         normalize_vector: bool = False,
         eps: float = 1.0e-8,
     ) -> None:
-        self.vector_path = Path(
-            vector_path
-        )
+        self.vector_path = Path(vector_path)
 
-        self.target_embedding_path = Path(
-            target_embedding_path
-        )
+        self.target_embedding_path = Path(target_embedding_path)
 
         self.eps = float(eps)
-        self.normalize_vector = bool(
-            normalize_vector
-        )
+        self.normalize_vector = bool(normalize_vector)
 
         if self.eps <= 0:
-            raise ValueError(
-                "eps must be positive."
-            )
+            raise ValueError("eps must be positive.")
 
-        self._cpu_vector = (
-            self._load_tensor(
-                self.vector_path
-            )
-        )
+        self._cpu_vector = self._load_tensor(self.vector_path)
 
-        self._cpu_target_embedding = (
-            self._load_tensor(
-                self.target_embedding_path
-            )
-        )
+        self._cpu_target_embedding = self._load_tensor(self.target_embedding_path)
 
         if self._cpu_vector.ndim != 1:
             raise RuntimeError(
@@ -80,36 +64,20 @@ class PooledSteeringController:
                 f"{tuple(self._cpu_vector.shape)}."
             )
 
-        if (
-            self._cpu_target_embedding.ndim
-            != 1
-        ):
+        if self._cpu_target_embedding.ndim != 1:
             raise RuntimeError(
                 "Expected target embedding shape "
                 "[channels], got "
                 f"{tuple(self._cpu_target_embedding.shape)}."
             )
 
-        if (
-            self._cpu_vector.shape
-            != self._cpu_target_embedding.shape
-        ):
-            raise RuntimeError(
-                "Pooled vector and target "
-                "embedding shapes differ."
-            )
+        if self._cpu_vector.shape != self._cpu_target_embedding.shape:
+            raise RuntimeError("Pooled vector and target " "embedding shapes differ.")
 
         if self.normalize_vector:
-            norm = (
-                self._cpu_vector
-                .norm()
-                .clamp_min(self.eps)
-            )
+            norm = self._cpu_vector.norm().clamp_min(self.eps)
 
-            self._cpu_vector = (
-                self._cpu_vector
-                / norm
-            )
+            self._cpu_vector = self._cpu_vector / norm
 
         self._runtime_cache: dict[
             tuple[str, torch.dtype],
@@ -130,9 +98,7 @@ class PooledSteeringController:
             enabled=enabled,
             operation=operation,
             strength=strength,
-            similarity_mode=(
-                similarity_mode
-            ),
+            similarity_mode=(similarity_mode),
         )
 
     @staticmethod
@@ -158,22 +124,12 @@ class PooledSteeringController:
             value,
             torch.Tensor,
         ):
-            raise TypeError(
-                f"Expected tensor in {path}."
-            )
+            raise TypeError(f"Expected tensor in {path}.")
 
-        value = (
-            value.detach()
-            .float()
-            .cpu()
-            .contiguous()
-        )
+        value = value.detach().float().cpu().contiguous()
 
         if not torch.isfinite(value).all():
-            raise RuntimeError(
-                f"Tensor in {path} contains "
-                "NaN or Inf."
-            )
+            raise RuntimeError(f"Tensor in {path} contains " "NaN or Inf.")
 
         return value
 
@@ -182,45 +138,27 @@ class PooledSteeringController:
         enabled: bool,
         operation: str,
         strength: float,
-        similarity_mode: (
-            str | None
-        ) = None,
+        similarity_mode: str | None = None,
     ) -> None:
         if operation not in self.OPERATION_SIGNS:
-            raise ValueError(
-                f"Unsupported pooled operation: "
-                f"{operation!r}."
-            )
+            raise ValueError(f"Unsupported pooled operation: " f"{operation!r}.")
 
         strength = float(strength)
 
         if strength < 0:
-            raise ValueError(
-                "Pooled strength must be "
-                "nonnegative."
-            )
+            raise ValueError("Pooled strength must be " "nonnegative.")
 
         next_similarity_mode = (
-            self.similarity_mode
-            if similarity_mode is None
-            else str(similarity_mode)
+            self.similarity_mode if similarity_mode is None else str(similarity_mode)
         )
 
-        if (
-            next_similarity_mode
-            not in self.VALID_SIMILARITY_MODES
-        ):
-            raise ValueError(
-                "Unknown similarity mode: "
-                f"{next_similarity_mode!r}."
-            )
+        if next_similarity_mode not in self.VALID_SIMILARITY_MODES:
+            raise ValueError("Unknown similarity mode: " f"{next_similarity_mode!r}.")
 
         self.enabled = bool(enabled)
         self.operation = operation
         self.strength = strength
-        self.similarity_mode = (
-            next_similarity_mode
-        )
+        self.similarity_mode = next_similarity_mode
 
     def apply(
         self,
@@ -228,10 +166,7 @@ class PooledSteeringController:
     ) -> torch.Tensor:
         self.total_calls += 1
 
-        if (
-            not self.enabled
-            or self.strength == 0.0
-        ):
+        if not self.enabled or self.strength == 0.0:
             return pooled_prompt_embeds
 
         if pooled_prompt_embeds.ndim != 2:
@@ -244,13 +179,9 @@ class PooledSteeringController:
         (
             vector,
             target_embedding,
-        ) = self._get_runtime_tensors(
-            pooled_prompt_embeds
-        )
+        ) = self._get_runtime_tensors(pooled_prompt_embeds)
 
-        channels = (
-            pooled_prompt_embeds.shape[-1]
-        )
+        channels = pooled_prompt_embeds.shape[-1]
 
         if vector.shape[0] != channels:
             raise RuntimeError(
@@ -259,15 +190,9 @@ class PooledSteeringController:
                 f"{vector.shape[0]} != {channels}."
             )
 
-        batch_size = (
-            pooled_prompt_embeds.shape[0]
-        )
+        batch_size = pooled_prompt_embeds.shape[0]
 
-        target_batch = (
-            target_embedding
-            .unsqueeze(0)
-            .expand(batch_size, -1)
-        )
+        target_batch = target_embedding.unsqueeze(0).expand(batch_size, -1)
 
         similarity = F.cosine_similarity(
             pooled_prompt_embeds.float(),
@@ -276,64 +201,26 @@ class PooledSteeringController:
             eps=self.eps,
         )
 
-        scaled_similarity = (
-            self._transform_similarity(
-                similarity
-            )
-        )
+        scaled_similarity = self._transform_similarity(similarity)
 
-        alpha = (
-            self.strength
-            * scaled_similarity
-        )
+        alpha = self.strength * scaled_similarity
 
-        sign = self.OPERATION_SIGNS[
-            self.operation
-        ]
+        sign = self.OPERATION_SIGNS[self.operation]
 
         delta = (
-            sign
-            * alpha.to(
-                dtype=(
-                    pooled_prompt_embeds
-                    .dtype
-                )
-            ).unsqueeze(-1)
-            * vector.unsqueeze(0)
+            sign * alpha.to(dtype=(pooled_prompt_embeds.dtype)).unsqueeze(-1) * vector.unsqueeze(0)
         )
 
-        steered = (
-            pooled_prompt_embeds
-            + delta
-        )
+        steered = pooled_prompt_embeds + delta
 
-        if not torch.isfinite(
-            steered
-        ).all():
-            raise RuntimeError(
-                "Steered pooled embedding "
-                "contains NaN or Inf."
-            )
+        if not torch.isfinite(steered).all():
+            raise RuntimeError("Steered pooled embedding " "contains NaN or Inf.")
 
-        initial_norm = (
-            pooled_prompt_embeds
-            .detach()
-            .float()
-            .norm(dim=-1)
-        )
+        initial_norm = pooled_prompt_embeds.detach().float().norm(dim=-1)
 
-        delta_norm = (
-            delta.detach()
-            .float()
-            .norm(dim=-1)
-        )
+        delta_norm = delta.detach().float().norm(dim=-1)
 
-        relative_scale = (
-            delta_norm
-            / initial_norm.clamp_min(
-                self.eps
-            )
-        )
+        relative_scale = delta_norm / initial_norm.clamp_min(self.eps)
 
         self.modified_calls += 1
 
@@ -341,36 +228,13 @@ class PooledSteeringController:
             "enabled": self.enabled,
             "operation": self.operation,
             "strength": self.strength,
-            "similarity_mode": (
-                self.similarity_mode
-            ),
-            "cosine_similarity": (
-                similarity.detach()
-                .cpu()
-                .tolist()
-            ),
-            "scaled_similarity": (
-                scaled_similarity
-                .detach()
-                .cpu()
-                .tolist()
-            ),
-            "effective_alpha": (
-                alpha.detach()
-                .cpu()
-                .tolist()
-            ),
-            "initial_norm": (
-                initial_norm.cpu().tolist()
-            ),
-            "delta_norm": (
-                delta_norm.cpu().tolist()
-            ),
-            "relative_scale": (
-                relative_scale
-                .cpu()
-                .tolist()
-            ),
+            "similarity_mode": (self.similarity_mode),
+            "cosine_similarity": (similarity.detach().cpu().tolist()),
+            "scaled_similarity": (scaled_similarity.detach().cpu().tolist()),
+            "effective_alpha": (alpha.detach().cpu().tolist()),
+            "initial_norm": (initial_norm.cpu().tolist()),
+            "delta_norm": (delta_norm.cpu().tolist()),
+            "relative_scale": (relative_scale.cpu().tolist()),
         }
 
         return steered
@@ -383,24 +247,16 @@ class PooledSteeringController:
             # Exact formula described in SHIFT.
             return similarity
 
-        if (
-            self.similarity_mode
-            == "positive"
-        ):
+        if self.similarity_mode == "positive":
             # Optional defensive ablation:
             # prevent negative cosine from
             # reversing the operation.
             return similarity.clamp_min(0.0)
 
-        if (
-            self.similarity_mode
-            == "absolute"
-        ):
+        if self.similarity_mode == "absolute":
             return similarity.abs()
 
-        raise RuntimeError(
-            "Invalid similarity mode."
-        )
+        raise RuntimeError("Invalid similarity mode.")
 
     def _get_runtime_tensors(
         self,
@@ -414,9 +270,7 @@ class PooledSteeringController:
             reference.dtype,
         )
 
-        cached = self._runtime_cache.get(
-            key
-        )
+        cached = self._runtime_cache.get(key)
 
         if cached is not None:
             return cached
@@ -427,12 +281,10 @@ class PooledSteeringController:
             non_blocking=True,
         )
 
-        target = (
-            self._cpu_target_embedding.to(
-                device=reference.device,
-                dtype=reference.dtype,
-                non_blocking=True,
-            )
+        target = self._cpu_target_embedding.to(
+            device=reference.device,
+            dtype=reference.dtype,
+            non_blocking=True,
         )
 
         self._runtime_cache[key] = (
@@ -445,53 +297,27 @@ class PooledSteeringController:
     def reset_statistics(self) -> None:
         self.total_calls = 0
         self.modified_calls = 0
-        self.last_record: (
-            dict[str, Any] | None
-        ) = None
+        self.last_record: dict[str, Any] | None = None
 
     def statistics(self) -> dict[str, Any]:
         return {
             "total_calls": self.total_calls,
-            "modified_calls": (
-                self.modified_calls
-            ),
-            "last_record": (
-                self.last_record
-            ),
+            "modified_calls": (self.modified_calls),
+            "last_record": (self.last_record),
         }
 
     def summary(self) -> dict[str, Any]:
         return {
             "type": self.__class__.__name__,
-            "vector_path": str(
-                self.vector_path
-            ),
-            "target_embedding_path": str(
-                self.target_embedding_path
-            ),
-            "vector_shape": list(
-                self._cpu_vector.shape
-            ),
-            "vector_norm": float(
-                self._cpu_vector
-                .norm()
-                .item()
-            ),
-            "target_embedding_norm": float(
-                self._cpu_target_embedding
-                .norm()
-                .item()
-            ),
-            "normalize_vector": (
-                self.normalize_vector
-            ),
+            "vector_path": str(self.vector_path),
+            "target_embedding_path": str(self.target_embedding_path),
+            "vector_shape": list(self._cpu_vector.shape),
+            "vector_norm": float(self._cpu_vector.norm().item()),
+            "target_embedding_norm": float(self._cpu_target_embedding.norm().item()),
+            "normalize_vector": (self.normalize_vector),
             "enabled": self.enabled,
             "operation": self.operation,
             "strength": self.strength,
-            "similarity_mode": (
-                self.similarity_mode
-            ),
-            "statistics": (
-                self.statistics()
-            ),
+            "similarity_mode": (self.similarity_mode),
+            "statistics": (self.statistics()),
         }

@@ -45,30 +45,22 @@ class SteeringExperimentPipeline:
         logger: logging.Logger,
     ) -> None:
         self.model = model
-        self.intervention_manager = (
-            intervention_manager
-        )
-        self.generation_config = (
-            generation_config
-        )
+        self.intervention_manager = intervention_manager
+        self.generation_config = generation_config
         self.output_dir = Path(output_dir)
         self.seed = int(seed)
         self.logger = logger
 
-        self.generation_dict = (
-            OmegaConf.to_container(
-                self.generation_config,
-                resolve=True,
-            )
+        self.generation_dict = OmegaConf.to_container(
+            self.generation_config,
+            resolve=True,
         )
 
         if not isinstance(
             self.generation_dict,
             dict,
         ):
-            raise TypeError(
-                "generation_config must resolve to a mapping."
-            )
+            raise TypeError("generation_config must resolve to a mapping.")
 
         model_report = self.model.get_model_report()
 
@@ -76,12 +68,8 @@ class SteeringExperimentPipeline:
             "repo_id": model_report.get("repo_id"),
             "revision": model_report.get("revision"),
             "dtype": model_report.get("dtype"),
-            "pipeline_class": (
-                model_report.get("pipeline_class")
-            ),
-            "transformer_class": (
-                model_report.get("transformer_class")
-            ),
+            "pipeline_class": (model_report.get("pipeline_class")),
+            "transformer_class": (model_report.get("transformer_class")),
         }
 
         self.output_store = RunOutputStore(
@@ -99,18 +87,10 @@ class SteeringExperimentPipeline:
             name="schedules",
         )
 
-        self.strengths = [
-            float(value)
-            for value in self._to_container(
-                strengths
-            )
-        ]
+        self.strengths = [float(value) for value in self._to_container(strengths)]
 
         if not self.strengths:
-            raise ValueError(
-                "At least one steering strength "
-                "must be configured."
-            )
+            raise ValueError("At least one steering strength " "must be configured.")
 
         self._validate_schedules()
 
@@ -137,45 +117,29 @@ class SteeringExperimentPipeline:
         result = self._to_container(value)
 
         if not isinstance(result, list):
-            raise TypeError(
-                f"experiment.{name} must be a list."
-            )
+            raise TypeError(f"experiment.{name} must be a list.")
 
         return result
 
     def _validate_schedules(self) -> None:
         for schedule in self.schedules:
             if "name" not in schedule:
-                raise ValueError(
-                    "Every schedule requires a name."
-                )
+                raise ValueError("Every schedule requires a name.")
 
             blocks = schedule.get("blocks")
             steps = schedule.get("steps")
 
             if not isinstance(blocks, list):
-                raise TypeError(
-                    f"Schedule {schedule['name']!r} "
-                    "requires a blocks list."
-                )
+                raise TypeError(f"Schedule {schedule['name']!r} " "requires a blocks list.")
 
             if not isinstance(steps, list):
-                raise TypeError(
-                    f"Schedule {schedule['name']!r} "
-                    "requires a steps list."
-                )
+                raise TypeError(f"Schedule {schedule['name']!r} " "requires a steps list.")
 
             if not blocks:
-                raise ValueError(
-                    f"Schedule {schedule['name']!r} "
-                    "has no blocks."
-                )
+                raise ValueError(f"Schedule {schedule['name']!r} " "has no blocks.")
 
             if not steps:
-                raise ValueError(
-                    f"Schedule {schedule['name']!r} "
-                    "has no steps."
-                )
+                raise ValueError(f"Schedule {schedule['name']!r} " "has no steps.")
 
     def run(self) -> dict[str, Any]:
         pipe = self.model.get_pipeline()
@@ -185,14 +149,9 @@ class SteeringExperimentPipeline:
             exist_ok=True,
         )
 
-        run_records: list[
-            dict[str, Any]
-        ] = []
+        run_records: list[dict[str, Any]] = []
 
-        metadata_path = (
-            self.output_dir
-            / "experiment_metadata.yaml"
-        )
+        metadata_path = self.output_dir / "experiment_metadata.yaml"
 
         self._save_experiment_metadata(
             run_records=run_records,
@@ -204,9 +163,7 @@ class SteeringExperimentPipeline:
             for case in self.cases:
                 case_name = str(case["name"])
                 prompt = str(case["prompt"])
-                operation = str(
-                    case["operation"]
-                )
+                operation = str(case["operation"])
 
                 baseline = self._generate_one(
                     pipe=pipe,
@@ -232,27 +189,15 @@ class SteeringExperimentPipeline:
                 )
 
                 for schedule in self.schedules:
-                    schedule_name = str(
-                        schedule["name"]
-                    )
+                    schedule_name = str(schedule["name"])
 
-                    blocks = [
-                        int(value)
-                        for value
-                        in schedule["blocks"]
-                    ]
+                    blocks = [int(value) for value in schedule["blocks"]]
 
-                    steps = [
-                        int(value)
-                        for value
-                        in schedule["steps"]
-                    ]
+                    steps = [int(value) for value in schedule["steps"]]
 
-                    schedule_strengths = (
-                        schedule.get(
-                            "strengths",
-                            self.strengths,
-                        )
+                    schedule_strengths = schedule.get(
+                        "strengths",
+                        self.strengths,
                     )
 
                     use_classifier = bool(
@@ -283,12 +228,8 @@ class SteeringExperimentPipeline:
                         )
                     )
 
-                    for raw_strength in (
-                        schedule_strengths
-                    ):
-                        strength = float(
-                            raw_strength
-                        )
+                    for raw_strength in schedule_strengths:
+                        strength = float(raw_strength)
 
                         record = self._generate_one(
                             pipe=pipe,
@@ -296,21 +237,13 @@ class SteeringExperimentPipeline:
                             prompt=prompt,
                             operation=operation,
                             strength=strength,
-                            schedule_name=(
-                                schedule_name
-                            ),
+                            schedule_name=(schedule_name),
                             blocks=blocks,
                             steps=steps,
-                            use_classifier=(
-                                use_classifier
-                            ),
+                            use_classifier=(use_classifier),
                             use_pooled=use_pooled,
-                            pooled_strength=(
-                                pooled_strength
-                            ),
-                            pooled_similarity_mode=(
-                                pooled_similarity_mode
-                            ),
+                            pooled_strength=(pooled_strength),
+                            pooled_similarity_mode=(pooled_similarity_mode),
                         )
 
                         run_records.append(record)
@@ -335,9 +268,7 @@ class SteeringExperimentPipeline:
             metadata_path=metadata_path,
         )
 
-        summary = self._summarize_runs(
-            run_records
-        )
+        summary = self._summarize_runs(run_records)
 
         self.logger.info(
             "Saved metadata: %s",
@@ -350,12 +281,8 @@ class SteeringExperimentPipeline:
         )
 
         return {
-            "output_dir": str(
-                self.output_dir
-            ),
-            "metadata_path": str(
-                metadata_path
-            ),
+            "output_dir": str(self.output_dir),
+            "metadata_path": str(metadata_path),
             "num_runs": len(run_records),
             "summary": summary,
         }
@@ -375,15 +302,9 @@ class SteeringExperimentPipeline:
         pooled_strength: float,
         pooled_similarity_mode: str,
     ) -> dict[str, Any]:
-        is_baseline = (
-            schedule_name == "baseline"
-        )
+        is_baseline = schedule_name == "baseline"
 
-        regularization_name = (
-            "svm"
-            if use_classifier
-            else "static"
-        )
+        regularization_name = "svm" if use_classifier else "static"
 
         suffix = (
             "baseline"
@@ -397,9 +318,7 @@ class SteeringExperimentPipeline:
             )
         )
 
-        run_name = (
-            f"{case_name}__{suffix}"
-        )
+        run_name = f"{case_name}__{suffix}"
 
         specification = self._build_run_specification(
             case_name=case_name,
@@ -412,39 +331,25 @@ class SteeringExperimentPipeline:
             use_classifier=use_classifier,
             use_pooled=use_pooled,
             pooled_strength=pooled_strength,
-            pooled_similarity_mode=(
-                pooled_similarity_mode
-            ),
+            pooled_similarity_mode=(pooled_similarity_mode),
         )
 
-        specification_hash = (
-            RunOutputStore.hash_specification(
-                specification
-            )
-        )
+        specification_hash = RunOutputStore.hash_specification(specification)
 
         run_id = specification_hash[:16]
 
-        filename = (
-            f"{self._sanitize(case_name)}"
-            f"__{self._sanitize(suffix)}"
-            f"__{run_id}.png"
-        )
+        filename = f"{self._sanitize(case_name)}" f"__{self._sanitize(suffix)}" f"__{run_id}.png"
 
         paths = self.output_store.build_paths(
             run_id=run_id,
             filename=filename,
         )
 
-        existing_record, resume_action = (
-            self.output_store.prepare(
-                paths=paths,
-                run_id=run_id,
-                specification_hash=(
-                    specification_hash
-                ),
-                specification=specification,
-            )
+        existing_record, resume_action = self.output_store.prepare(
+            paths=paths,
+            run_id=run_id,
+            specification_hash=(specification_hash),
+            specification=specification,
         )
 
         if existing_record is not None:
@@ -467,20 +372,14 @@ class SteeringExperimentPipeline:
             enabled=use_pooled,
             operation=operation,
             strength=pooled_strength,
-            similarity_mode=(
-                pooled_similarity_mode
-            ),
+            similarity_mode=(pooled_similarity_mode),
         )
 
         self.intervention_manager.reset_pooled_statistics()
 
-        self.intervention_manager.begin_steering_run(
-            run_name=run_name
-        )
+        self.intervention_manager.begin_steering_run(run_name=run_name)
 
-        generator = torch.Generator(
-            device="cpu"
-        ).manual_seed(self.seed)
+        generator = torch.Generator(device="cpu").manual_seed(self.seed)
 
         self.logger.info(
             "Run=%s, run_id=%s, operation=%s, "
@@ -503,45 +402,22 @@ class SteeringExperimentPipeline:
             _,
         ) = self.model.encode_prompt(
             prompt=prompt,
-            max_sequence_length=int(
-                self.generation_config
-                .max_sequence_length
-            ),
+            max_sequence_length=int(self.generation_config.max_sequence_length),
             num_images_per_prompt=1,
         )
 
-        pooled_prompt_embeds = (
-            self.intervention_manager
-            .apply_pooled_steering(
-                pooled_prompt_embeds
-            )
-        )
+        pooled_prompt_embeds = self.intervention_manager.apply_pooled_steering(pooled_prompt_embeds)
 
         try:
             with torch.inference_mode():
                 result = pipe(
                     prompt_embeds=prompt_embeds,
-                    pooled_prompt_embeds=(
-                        pooled_prompt_embeds
-                    ),
-                    width=int(
-                        self.generation_config.width
-                    ),
-                    height=int(
-                        self.generation_config.height
-                    ),
-                    num_inference_steps=int(
-                        self.generation_config
-                        .num_inference_steps
-                    ),
-                    guidance_scale=float(
-                        self.generation_config
-                        .guidance_scale
-                    ),
-                    max_sequence_length=int(
-                        self.generation_config
-                        .max_sequence_length
-                    ),
+                    pooled_prompt_embeds=(pooled_prompt_embeds),
+                    width=int(self.generation_config.width),
+                    height=int(self.generation_config.height),
+                    num_inference_steps=int(self.generation_config.num_inference_steps),
+                    guidance_scale=float(self.generation_config.guidance_scale),
+                    max_sequence_length=int(self.generation_config.max_sequence_length),
                     num_images_per_prompt=1,
                     generator=generator,
                     output_type="pil",
@@ -550,31 +426,17 @@ class SteeringExperimentPipeline:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        generation_seconds = (
-            time.perf_counter()
-            - generation_started
-        )
+        generation_seconds = time.perf_counter() - generation_started
 
-        statistics = (
-            self.intervention_manager
-            .steering_statistics()
-        )
+        statistics = self.intervention_manager.steering_statistics()
 
-        pooled_statistics = (
-            self.intervention_manager
-            .pooled_statistics()
-        )
+        pooled_statistics = self.intervention_manager.pooled_statistics()
 
         if statistics is not None:
             self.logger.info(
-                "Modified calls: %s; "
-                "relative scale mean: %s",
-                statistics.get(
-                    "modified_calls"
-                ),
-                statistics.get(
-                    "relative_scale_mean"
-                ),
+                "Modified calls: %s; " "relative scale mean: %s",
+                statistics.get("modified_calls"),
+                statistics.get("relative_scale_mean"),
             )
 
         record = {
@@ -582,9 +444,7 @@ class SteeringExperimentPipeline:
             "status": "saving",
             "run_id": run_id,
             "run_name": run_name,
-            "specification_hash": (
-                specification_hash
-            ),
+            "specification_hash": (specification_hash),
             "specification": specification,
             "resume_action": resume_action,
             "case_name": case_name,
@@ -596,31 +456,21 @@ class SteeringExperimentPipeline:
             "schedule": schedule_name,
             "blocks": blocks,
             "steps": steps,
-            "generation_seconds": (
-                generation_seconds
-            ),
-            "completed_at_utc": (
-                datetime.now(
-                    timezone.utc
-                ).isoformat()
-            ),
+            "generation_seconds": (generation_seconds),
+            "completed_at_utc": (datetime.now(timezone.utc).isoformat()),
             "steering_statistics": statistics,
             "pooled": {
                 "enabled": use_pooled,
                 "strength": pooled_strength,
-                "similarity_mode": (
-                    pooled_similarity_mode
-                ),
+                "similarity_mode": (pooled_similarity_mode),
                 "statistics": pooled_statistics,
             },
         }
 
-        completed_record = (
-            self.output_store.save_completed(
-                image=result.images[0],
-                record=record,
-                paths=paths,
-            )
+        completed_record = self.output_store.save_completed(
+            image=result.images[0],
+            record=record,
+            paths=paths,
         )
 
         self.logger.info(
@@ -659,19 +509,14 @@ class SteeringExperimentPipeline:
                 "strength": strength,
                 "blocks": blocks,
                 "steps": steps,
-                "use_classifier": (
-                    use_classifier
-                ),
+                "use_classifier": (use_classifier),
                 "pooled": {
                     "enabled": use_pooled,
                     "strength": pooled_strength,
-                    "similarity_mode": (
-                        pooled_similarity_mode
-                    ),
+                    "similarity_mode": (pooled_similarity_mode),
                 },
             },
         }
-
 
     def _save_experiment_metadata(
         self,
@@ -685,26 +530,18 @@ class SteeringExperimentPipeline:
             "seed": self.seed,
             "model": self.model_identity,
             "generation": self.generation_dict,
-            "default_strengths": (
-                self.strengths
-            ),
+            "default_strengths": (self.strengths),
             "cases": self.cases,
             "schedules": self.schedules,
-            "summary": self._summarize_runs(
-                run_records
-            ),
+            "summary": self._summarize_runs(run_records),
             "runs": run_records,
-            "intervention": (
-                self.model
-                .get_intervention_report()
-            ),
+            "intervention": (self.model.get_intervention_report()),
         }
 
         self.output_store.atomic_save_yaml(
             data=metadata,
             path=metadata_path,
         )
-
 
     @staticmethod
     def _summarize_runs(
@@ -722,29 +559,17 @@ class SteeringExperimentPipeline:
 
         return {
             "total": len(run_records),
-            "generated": actions.count(
-                "generated"
-            ),
-            "skipped_existing": actions.count(
-                "skipped_existing"
-            ),
-            "repaired": actions.count(
-                "repaired"
-            ),
-            "overwritten": actions.count(
-                "overwritten"
-            ),
+            "generated": actions.count("generated"),
+            "skipped_existing": actions.count("skipped_existing"),
+            "repaired": actions.count("repaired"),
+            "overwritten": actions.count("overwritten"),
         }
 
     @staticmethod
     def _format_number(
         value: float,
     ) -> str:
-        return (
-            f"{value:g}"
-            .replace("-", "m")
-            .replace(".", "p")
-        )
+        return f"{value:g}".replace("-", "m").replace(".", "p")
 
     @staticmethod
     def _sanitize(
