@@ -47,10 +47,7 @@ def main() -> int:
         )
         return 2
 
-    difference = np.abs(
-        reference.astype(np.int16)
-        - candidate.astype(np.int16)
-    )
+    difference = np.abs(reference.astype(np.int16) - candidate.astype(np.int16))
 
     exact_pixels = np.array_equal(
         reference,

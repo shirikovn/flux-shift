@@ -24,7 +24,11 @@ block_indices:
   - 17
   - 18
 
-source_step: 0
+step_indices:
+  - 0
+  - 1
+  - 2
+  - 3
 
 # 4 пары validation, 16 пар train.
 validation_fraction: 0.2

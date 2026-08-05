@@ -8,10 +8,74 @@ defaults:
 seed: 123
 device: cuda
 
+run_dir: ${hydra:runtime.output_dir}
+
 shift:
   artifacts_root: artifacts/cyberpunk
 
+  # Available:
+  #   tokenwise_difference
+  #   token_mean_difference
+  #   svm_normal
+  vector_type: tokenwise_difference
+  
+  vector_timing:
+    # shared:
+    #   use one source step for every runtime step
+    #
+    # per_step:
+    #   runtime step t uses the vector collected at step t
+    #
+    # custom:
+    #   use intervention.controller.vector_paths
+    mode: shared
+
+    source_step: 0
+
+    steps:
+      - 0
+      - 1
+      - 2
+      - 3
+    
+  classifier_timing:
+    # shared:
+    #   every runtime step uses the source-step classifier
+    #
+    # per_step:
+    #   runtime step t uses classifier t
+    mode: per_step
+
+    source_step: 0
+
+    steps:
+      - 0
+      - 1
+      - 2
+      - 3
+
   schedule_name: early
+  
+  artifact_blocks:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
+    - 11
+    - 12
+    - 13
+    - 14
+    - 15
+    - 16
+    - 17
+    - 18
 
   blocks:
     - 0
@@ -31,7 +95,26 @@ shift:
   eta_max: 4.0
 
 experiment:
-  output_dir: ${hydra:runtime.output_dir}
+  output_dir: ${run_dir}
+
+  resume:
+    # resume:
+    #   skip valid completed runs and repair corrupt ones
+    #
+    # overwrite:
+    #   regenerate every configured run
+    #
+    # error:
+    #   fail if any expected output already exists
+    mode: resume
+
+    # Open the PNG and compare its stored SHA-256 before
+    # treating it as complete.
+    verify_images: true
+
+    # Automatically delete and regenerate orphaned,
+    # truncated, or inconsistent outputs.
+    repair_incomplete: true
 
   strengths:
     - ${shift.dit_gamma}

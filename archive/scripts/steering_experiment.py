@@ -9,7 +9,6 @@ from omegaconf import DictConfig, OmegaConf
 
 from src.utils.init_utils import set_random_seed
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -29,18 +28,10 @@ def main(config: DictConfig) -> None:
 
     set_random_seed(int(config.seed))
 
-    device = torch.device(
-        str(config.device)
-    )
+    device = torch.device(str(config.device))
 
-    if (
-        device.type == "cuda"
-        and not torch.cuda.is_available()
-    ):
-        raise RuntimeError(
-            "config.device=cuda, but CUDA "
-            "is unavailable."
-        )
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("config.device=cuda, but CUDA " "is unavailable.")
 
     if device.type == "cuda":
         logger.info(
@@ -48,16 +39,12 @@ def main(config: DictConfig) -> None:
             torch.cuda.get_device_name(device),
         )
 
-    intervention_manager = instantiate(
-        config.intervention
-    )
+    intervention_manager = instantiate(config.intervention)
 
     model = instantiate(
         config.model,
         device=device,
-        intervention_manager=(
-            intervention_manager
-        ),
+        intervention_manager=(intervention_manager),
         _recursive_=False,
     )
     model.prepare_for_inference()
@@ -70,9 +57,7 @@ def main(config: DictConfig) -> None:
         schedules=config.experiment.schedules,
         strengths=config.experiment.strengths,
         generation_config=config.generation,
-        output_dir=str(
-            config.experiment.output_dir
-        ),
+        output_dir=str(config.experiment.output_dir),
         seed=int(config.seed),
         logger=logger,
         _recursive_=False,

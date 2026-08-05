@@ -1,8 +1,8 @@
 defaults:
   - model: flux_schnell
   - generation: schnell_512
-  - intervention: collect_mean_difference
-  - dataset: cyberpunk_5
+  - intervention: collect_dit_artifacts
+  - dataset: cyberpunk_smoke
   - pipeline: activation_collection
   - _self_
 

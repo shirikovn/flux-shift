@@ -2,7 +2,9 @@ defaults:
   - trainer: linear_svm
   - _self_
 
-# Контрольная статическая конфигурация для следующей абляции:
+run_dir: ${hydra:runtime.output_dir}
+
+# Control configuration retained for later ablations.
 reference:
   schedule: early
   blocks: [0, 1, 2, 3, 4]

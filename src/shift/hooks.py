@@ -93,31 +93,17 @@ class ShiftTextAttentionHook:
             activation=activation,
         )
 
-        if (
-            self.collector is not None
-            and self.state.should_capture(
-                self.block_index
-            )
-        ):
+        if self.collector is not None and self.state.should_capture(self.block_index):
             self.collector.add(
-                pair_name=str(
-                    self.state.current_pair_name
-                ),
-                prompt_role=str(
-                    self.state.current_prompt_role
-                ),
+                pair_name=str(self.state.current_pair_name),
+                prompt_role=str(self.state.current_prompt_role),
                 block_index=self.block_index,
                 step_index=self.state.current_step,
                 timestep=self.state.current_timestep,
                 activation=activation,
             )
 
-        if (
-            self.controller is not None
-            and self.state.should_steer(
-                self.block_index
-            )
-        ):
+        if self.controller is not None and self.state.should_steer(self.block_index):
             steered = self.controller.apply(
                 block_index=self.block_index,
                 step_index=self.state.current_step,

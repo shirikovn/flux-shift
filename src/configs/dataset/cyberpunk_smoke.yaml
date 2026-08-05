@@ -1,0 +1,10 @@
+_target_: src.datasets.prompt_pairs.PromptPairDataset
+
+pairs:
+  - name: city
+    negative_prompt: "a photograph of a city"
+    positive_prompt: "a photograph of a city in cyberpunk style"
+
+  - name: portrait
+    negative_prompt: "a portrait photograph of a person"
+    positive_prompt: "a portrait photograph of a person in cyberpunk style"

@@ -23,10 +23,15 @@ blocks:
   - 17
   - 18
 
-# Collectors сохраняют только activation первого шага.
-# Сама генерация пока продолжает выполнять все 4 шага.
+# Collect all four FLUX.1-schnell diffusion steps.
+#
+# The pipeline skips VAE decoding. When only an early subset
+# is requested, it stops after the final requested step.
 steps:
   - 0
+  - 1
+  - 2
+  - 3
 
 controller: null
 pooled_controller: null

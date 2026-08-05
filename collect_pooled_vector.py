@@ -7,6 +7,8 @@ import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
+from src.utils.init_utils import set_random_seed
+from src.utils.run_manifest import RunManifest
 
 logger = logging.getLogger(__name__)
 
@@ -25,57 +27,66 @@ def main(config: DictConfig) -> None:
         ),
     )
 
-    device = torch.device(
-        str(config.device)
-    )
+    set_random_seed(int(config.seed))
 
-    if (
-        device.type == "cuda"
-        and not torch.cuda.is_available()
-    ):
-        raise RuntimeError(
-            "CUDA is unavailable."
+    device = torch.device(str(config.device))
+
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("config.device=cuda, but CUDA is unavailable.")
+
+    with RunManifest(
+        output_dir=str(config.run_dir),
+        run_name="collect_pooled_vector",
+        config=config,
+        device=device,
+    ) as manifest:
+        dataset = instantiate(config.dataset)
+
+        model = instantiate(
+            config.model,
+            device=device,
+            intervention_manager=None,
+            _recursive_=False,
         )
 
-    dataset = instantiate(
-        config.dataset
-    )
+        with manifest.stage("model_prepare"):
+            model.prepare_for_inference()
 
-    model = instantiate(
-        config.model,
-        device=device,
-        intervention_manager=None,
-        _recursive_=False,
-    )
+        manifest.add_result(
+            "model",
+            model.get_model_report(),
+        )
 
-    model.prepare_for_inference()
+        pipeline = instantiate(
+            config.pipeline,
+            model=model,
+            dataset=dataset,
+            target_prompt=str(config.target_prompt),
+            generation_config=config.generation,
+            output_dir=str(config.output_dir),
+            logger=logger,
+            _recursive_=False,
+        )
 
-    pipeline = instantiate(
-        config.pipeline,
-        model=model,
-        dataset=dataset,
-        target_prompt=str(
-            config.target_prompt
-        ),
-        generation_config=(
-            config.generation
-        ),
-        output_dir=str(
-            config.output_dir
-        ),
-        logger=logger,
-        _recursive_=False,
-    )
+        with manifest.stage("pooled_vector_collection"):
+            results = pipeline.collect()
 
-    results = pipeline.collect()
+        manifest.add_result(
+            "pooled_collection",
+            results,
+        )
 
-    logger.info(
-        "Pooled collection results:\n%s",
-        OmegaConf.to_yaml(
-            OmegaConf.create(results),
-            resolve=True,
-        ),
-    )
+        logger.info(
+            "Pooled collection results:\n%s",
+            OmegaConf.to_yaml(
+                OmegaConf.create(results),
+                resolve=True,
+            ),
+        )
+        logger.info(
+            "Run manifest: %s",
+            manifest.path,
+        )
 
 
 if __name__ == "__main__":

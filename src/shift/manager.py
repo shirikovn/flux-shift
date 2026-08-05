@@ -32,10 +32,7 @@ class NativeInterventionManager:
         )
 
         if blocks is None:
-            raise AttributeError(
-                "The FLUX transformer has no "
-                "'transformer_blocks' attribute."
-            )
+            raise AttributeError("The FLUX transformer has no " "'transformer_blocks' attribute.")
 
         self._num_double_blocks = len(blocks)
         self._installed = True
@@ -48,9 +45,7 @@ class NativeInterventionManager:
             "type": "native",
             "installed": self._installed,
             "registered_blocks": 0,
-            "num_double_blocks": (
-                self._num_double_blocks
-            ),
+            "num_double_blocks": (self._num_double_blocks),
             "state": None,
         }
 
@@ -77,48 +72,29 @@ class ShiftInterventionManager:
     ) -> None:
         if mode not in self.VALID_MODES:
             raise ValueError(
-                f"Unsupported mode={mode!r}. "
-                f"Available: {sorted(self.VALID_MODES)}"
+                f"Unsupported mode={mode!r}. " f"Available: {sorted(self.VALID_MODES)}"
             )
 
         if mode == "collect" and collector is None:
-            raise ValueError(
-                "mode='collect' requires a collector."
-            )
+            raise ValueError("mode='collect' requires a collector.")
 
         if mode == "steer" and controller is None:
-            raise ValueError(
-                "mode='steer' requires a controller."
-            )
+            raise ValueError("mode='steer' requires a controller.")
 
         self.collector = collector
         self.controller = controller
 
         self.state = ShiftRuntimeState(
             mode=mode,
-            active_blocks=(
-                set(blocks)
-                if blocks is not None
-                else None
-            ),
-            active_steps=(
-                set(steps)
-                if steps is not None
-                else None
-            ),
+            active_blocks=(set(blocks) if blocks is not None else None),
+            active_steps=(set(steps) if steps is not None else None),
         )
 
-        self._text_handles: list[
-            RemovableHandle
-        ] = []
+        self._text_handles: list[RemovableHandle] = []
 
-        self._step_handle: (
-            RemovableHandle | None
-        ) = None
+        self._step_handle: RemovableHandle | None = None
 
-        self._hook_objects: list[
-            ShiftTextAttentionHook
-        ] = []
+        self._hook_objects: list[ShiftTextAttentionHook] = []
 
         self._installed = False
         self._num_double_blocks = 0
@@ -135,9 +111,7 @@ class ShiftInterventionManager:
         if self.pooled_controller is None:
             if enabled:
                 raise RuntimeError(
-                    "Pooled steering was enabled, "
-                    "but no pooled controller is "
-                    "configured."
+                    "Pooled steering was enabled, " "but no pooled controller is " "configured."
                 )
 
             return
@@ -156,9 +130,7 @@ class ShiftInterventionManager:
         if self.pooled_controller is None:
             return pooled_prompt_embeds
 
-        return self.pooled_controller.apply(
-            pooled_prompt_embeds
-        )
+        return self.pooled_controller.apply(pooled_prompt_embeds)
 
     def reset_pooled_statistics(
         self,
@@ -172,35 +144,18 @@ class ShiftInterventionManager:
         if self.pooled_controller is None:
             return None
 
-        return (
-            self.pooled_controller
-            .statistics()
-        )
+        return self.pooled_controller.statistics()
 
     def configure_locations(
         self,
         blocks: list[int] | None,
         steps: list[int] | None,
     ) -> None:
-        if (
-            self.controller is not None
-            and blocks is not None
-        ):
-            requested_blocks = {
-                int(value)
-                for value in blocks
-            }
-
-            missing_blocks = (
-                requested_blocks
-                - self.controller.available_blocks
+        if self.controller is not None:
+            self.controller.validate_locations(
+                blocks=blocks,
+                steps=steps,
             )
-
-            if missing_blocks:
-                raise ValueError(
-                    "No steering vectors loaded for "
-                    f"blocks: {sorted(missing_blocks)}"
-                )
 
         self.state.set_active_locations(
             blocks=blocks,
@@ -226,9 +181,7 @@ class ShiftInterventionManager:
         transformer: torch.nn.Module,
     ) -> None:
         if self._installed:
-            raise RuntimeError(
-                "SHIFT hooks are already installed."
-            )
+            raise RuntimeError("SHIFT hooks are already installed.")
 
         blocks = getattr(
             transformer,
@@ -237,28 +190,19 @@ class ShiftInterventionManager:
         )
 
         if blocks is None:
-            raise AttributeError(
-                "The FLUX transformer has no "
-                "'transformer_blocks' attribute."
-            )
+            raise AttributeError("The FLUX transformer has no " "'transformer_blocks' attribute.")
 
         self._num_double_blocks = len(blocks)
         self.state.reset_traces()
 
-        step_hook = TransformerStepHook(
-            self.state
+        step_hook = TransformerStepHook(self.state)
+
+        self._step_handle = transformer.register_forward_pre_hook(
+            step_hook,
+            with_kwargs=True,
         )
 
-        self._step_handle = (
-            transformer.register_forward_pre_hook(
-                step_hook,
-                with_kwargs=True,
-            )
-        )
-
-        for block_index, block in enumerate(
-            blocks
-        ):
+        for block_index, block in enumerate(blocks):
             attention = getattr(
                 block,
                 "attn",
@@ -266,10 +210,7 @@ class ShiftInterventionManager:
             )
 
             if attention is None:
-                raise AttributeError(
-                    f"Double-stream block {block_index} "
-                    "has no 'attn' module."
-                )
+                raise AttributeError(f"Double-stream block {block_index} " "has no 'attn' module.")
 
             text_output_projection = getattr(
                 attention,
@@ -278,10 +219,7 @@ class ShiftInterventionManager:
             )
 
             if text_output_projection is None:
-                raise AttributeError(
-                    f"Attention in block {block_index} "
-                    "has no 'to_add_out'."
-                )
+                raise AttributeError(f"Attention in block {block_index} " "has no 'to_add_out'.")
 
             hook = ShiftTextAttentionHook(
                 block_index=block_index,
@@ -290,10 +228,7 @@ class ShiftInterventionManager:
                 controller=self.controller,
             )
 
-            handle = (
-                text_output_projection
-                .register_forward_pre_hook(hook)
-            )
+            handle = text_output_projection.register_forward_pre_hook(hook)
 
             self._hook_objects.append(hook)
             self._text_handles.append(handle)
@@ -326,9 +261,7 @@ class ShiftInterventionManager:
         self,
         run_name: str,
     ) -> None:
-        self.state.begin_steering_run(
-            run_name=run_name
-        )
+        self.state.begin_steering_run(run_name=run_name)
 
     def configure_steering(
         self,
@@ -337,9 +270,7 @@ class ShiftInterventionManager:
         use_classifier: bool = False,
     ) -> None:
         if self.controller is None:
-            raise RuntimeError(
-                "No steering controller is configured."
-            )
+            raise RuntimeError("No steering controller is configured.")
 
         self.controller.configure(
             operation=operation,
@@ -356,33 +287,19 @@ class ShiftInterventionManager:
         return str(self.collector.save())
 
     def report(self) -> dict[str, Any]:
-        collector_summary = (
-            self.collector.summary()
-            if self.collector is not None
-            else None
-        )
+        collector_summary = self.collector.summary() if self.collector is not None else None
 
-        controller_summary = (
-            self.controller.summary()
-            if self.controller is not None
-            else None
-        )
+        controller_summary = self.controller.summary() if self.controller is not None else None
 
         return {
             "type": "shift",
             "installed": self._installed,
-            "registered_blocks": len(
-                self._text_handles
-            ),
-            "num_double_blocks": (
-                self._num_double_blocks
-            ),
+            "registered_blocks": len(self._text_handles),
+            "num_double_blocks": (self._num_double_blocks),
             "state": self.state.to_dict(),
             "collector": collector_summary,
             "controller": controller_summary,
             "pooled_controller": (
-                self.pooled_controller.summary()
-                if self.pooled_controller is not None
-                else None
+                self.pooled_controller.summary() if self.pooled_controller is not None else None
             ),
         }

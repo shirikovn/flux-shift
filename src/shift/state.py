@@ -31,16 +31,8 @@ class BlockTrace:
     def to_dict(self) -> dict[str, Any]:
         return {
             "calls": self.calls,
-            "first_shape": (
-                list(self.first_shape)
-                if self.first_shape is not None
-                else None
-            ),
-            "last_shape": (
-                list(self.last_shape)
-                if self.last_shape is not None
-                else None
-            ),
+            "first_shape": (list(self.first_shape) if self.first_shape is not None else None),
+            "last_shape": (list(self.last_shape) if self.last_shape is not None else None),
             "dtype": self.dtype,
             "device": self.device,
         }
@@ -62,9 +54,7 @@ class ShiftRuntimeState:
     current_step: int = -1
     current_timestep: float | None = None
 
-    blocks: dict[int, BlockTrace] = field(
-        default_factory=dict
-    )
+    blocks: dict[int, BlockTrace] = field(default_factory=dict)
 
     def reset_traces(self) -> None:
         self.blocks.clear()
@@ -74,17 +64,9 @@ class ShiftRuntimeState:
         blocks: list[int] | None,
         steps: list[int] | None,
     ) -> None:
-        self.active_blocks = (
-            set(int(value) for value in blocks)
-            if blocks is not None
-            else None
-        )
+        self.active_blocks = set(int(value) for value in blocks) if blocks is not None else None
 
-        self.active_steps = (
-            set(int(value) for value in steps)
-            if steps is not None
-            else None
-        )
+        self.active_steps = set(int(value) for value in steps) if steps is not None else None
 
     def begin_prompt_run(
         self,
@@ -95,13 +77,9 @@ class ShiftRuntimeState:
             "negative",
             "positive",
         }:
-            raise ValueError(
-                f"Unknown prompt role: {prompt_role!r}"
-            )
+            raise ValueError(f"Unknown prompt role: {prompt_role!r}")
 
-        self.current_run_name = (
-            f"{pair_name}__{prompt_role}"
-        )
+        self.current_run_name = f"{pair_name}__{prompt_role}"
         self.current_pair_name = pair_name
         self.current_prompt_role = prompt_role
 
@@ -127,9 +105,7 @@ class ShiftRuntimeState:
         timestep: Any,
     ) -> None:
         self.current_step += 1
-        self.current_timestep = self._to_float(
-            timestep
-        )
+        self.current_timestep = self._to_float(timestep)
 
     def record(
         self,
@@ -155,9 +131,7 @@ class ShiftRuntimeState:
         if self.current_prompt_role is None:
             return False
 
-        return self._location_is_active(
-            block_index
-        )
+        return self._location_is_active(block_index)
 
     def should_steer(
         self,
@@ -169,25 +143,16 @@ class ShiftRuntimeState:
         if self.current_run_name is None:
             return False
 
-        return self._location_is_active(
-            block_index
-        )
+        return self._location_is_active(block_index)
 
     def _location_is_active(
         self,
         block_index: int,
     ) -> bool:
-        if (
-            self.active_blocks is not None
-            and block_index not in self.active_blocks
-        ):
+        if self.active_blocks is not None and block_index not in self.active_blocks:
             return False
 
-        if (
-            self.active_steps is not None
-            and self.current_step
-            not in self.active_steps
-        ):
+        if self.active_steps is not None and self.current_step not in self.active_steps:
             return False
 
         return True
@@ -203,9 +168,7 @@ class ShiftRuntimeState:
             if value.numel() == 0:
                 return None
 
-            return float(
-                value.flatten()[0].item()
-            )
+            return float(value.flatten()[0].item())
 
         try:
             return float(value)
@@ -214,42 +177,23 @@ class ShiftRuntimeState:
 
     @property
     def total_calls(self) -> int:
-        return sum(
-            trace.calls
-            for trace in self.blocks.values()
-        )
+        return sum(trace.calls for trace in self.blocks.values())
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "mode": self.mode,
-            "current_run_name": (
-                self.current_run_name
-            ),
-            "current_pair_name": (
-                self.current_pair_name
-            ),
-            "current_prompt_role": (
-                self.current_prompt_role
-            ),
+            "current_run_name": (self.current_run_name),
+            "current_pair_name": (self.current_pair_name),
+            "current_prompt_role": (self.current_prompt_role),
             "current_step": self.current_step,
-            "current_timestep": (
-                self.current_timestep
-            ),
+            "current_timestep": (self.current_timestep),
             "active_blocks": (
-                sorted(self.active_blocks)
-                if self.active_blocks is not None
-                else None
+                sorted(self.active_blocks) if self.active_blocks is not None else None
             ),
-            "active_steps": (
-                sorted(self.active_steps)
-                if self.active_steps is not None
-                else None
-            ),
+            "active_steps": (sorted(self.active_steps) if self.active_steps is not None else None),
             "total_calls": self.total_calls,
             "blocks": {
                 str(block_index): trace.to_dict()
-                for block_index, trace in sorted(
-                    self.blocks.items()
-                )
+                for block_index, trace in sorted(self.blocks.items())
             },
         }

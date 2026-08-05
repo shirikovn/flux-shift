@@ -11,7 +11,6 @@ from typing import Any
 
 from omegaconf import DictConfig, OmegaConf
 
-
 VALID_TARGETS = {
     "prepare",
     "generate",
@@ -22,10 +21,7 @@ VALID_TARGETS = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Run the complete SHIFT artifact preparation "
-            "and generation workflow."
-        )
+        description=("Run the complete SHIFT artifact preparation " "and generation workflow.")
     )
 
     parser.add_argument(
@@ -41,20 +37,14 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--config",
-        default=(
-            "src/configs/workflow/"
-            "cyberpunk.yaml"
-        ),
+        default=("src/configs/workflow/" "cyberpunk.yaml"),
         help="Path to the workflow YAML config.",
     )
 
     parser.add_argument(
         "--force",
         action="store_true",
-        help=(
-            "Run cached stages even when their "
-            "output checks already pass."
-        ),
+        help=("Run cached stages even when their " "output checks already pass."),
     )
 
     parser.add_argument(
@@ -67,10 +57,7 @@ def parse_args() -> argparse.Namespace:
         "--stage",
         action="append",
         default=[],
-        help=(
-            "Run only a particular stage. "
-            "May be supplied multiple times."
-        ),
+        help=("Run only a particular stage. " "May be supplied multiple times."),
     )
 
     parser.add_argument(
@@ -78,10 +65,7 @@ def parse_args() -> argparse.Namespace:
         dest="overrides",
         nargs="*",
         default=[],
-        help=(
-            "OmegaConf dotlist overrides, for example: "
-            "--set parameters.dit_gamma=30"
-        ),
+        help=("OmegaConf dotlist overrides, for example: " "--set parameters.dit_gamma=30"),
     )
 
     return parser.parse_args()
@@ -92,19 +76,12 @@ def load_config(
     overrides: list[str],
 ) -> DictConfig:
     if not config_path.is_file():
-        raise FileNotFoundError(
-            f"Workflow config does not exist: "
-            f"{config_path}"
-        )
+        raise FileNotFoundError(f"Workflow config does not exist: " f"{config_path}")
 
     config = OmegaConf.load(config_path)
 
     if overrides:
-        override_config = (
-            OmegaConf.from_dotlist(
-                overrides
-            )
-        )
+        override_config = OmegaConf.from_dotlist(overrides)
 
         config = OmegaConf.merge(
             config,
@@ -120,12 +97,9 @@ def substitute_runtime_values(
     value: Any,
     timestamp: str,
 ) -> str:
-    return (
-        str(value)
-        .replace(
-            "{timestamp}",
-            timestamp,
-        )
+    return str(value).replace(
+        "{timestamp}",
+        timestamp,
     )
 
 
@@ -173,9 +147,7 @@ def check_output(
         elif kind == "any":
             passed = path.exists()
         else:
-            raise ValueError(
-                f"Unknown output kind: {kind!r}"
-            )
+            raise ValueError(f"Unknown output kind: {kind!r}")
 
         return (
             passed,
@@ -191,10 +163,7 @@ def check_output(
         pattern_path = Path(raw_pattern)
 
         if not pattern_path.is_absolute():
-            pattern_path = (
-                project_root
-                / pattern_path
-            )
+            pattern_path = project_root / pattern_path
 
         matches = glob.glob(
             str(pattern_path),
@@ -208,22 +177,13 @@ def check_output(
             )
         )
 
-        passed = (
-            len(matches)
-            >= min_count
-        )
+        passed = len(matches) >= min_count
 
-        description = (
-            f"glob: {pattern_path} "
-            f"({len(matches)}/{min_count})"
-        )
+        description = f"glob: {pattern_path} " f"({len(matches)}/{min_count})"
 
         return passed, description
 
-    raise ValueError(
-        "Every output check requires "
-        "either 'path' or 'glob'."
-    )
+    raise ValueError("Every output check requires " "either 'path' or 'glob'.")
 
 
 def validate_stage(
@@ -249,22 +209,12 @@ def validate_stage(
             timestamp=timestamp,
         )
 
-        passed_all = (
-            passed_all
-            and passed
-        )
+        passed_all = passed_all and passed
 
         if print_results:
-            marker = (
-                "OK"
-                if passed
-                else "MISSING"
-            )
+            marker = "OK" if passed else "MISSING"
 
-            print(
-                f"    [{marker}] "
-                f"{description}"
-            )
+            print(f"    [{marker}] " f"{description}")
 
     return passed_all
 
@@ -280,21 +230,13 @@ def select_stages(
     )
 
     if not isinstance(stages, dict):
-        raise TypeError(
-            "workflow.stages must be a mapping."
-        )
+        raise TypeError("workflow.stages must be a mapping.")
 
     if explicit_stages:
-        unknown = (
-            set(explicit_stages)
-            - set(stages)
-        )
+        unknown = set(explicit_stages) - set(stages)
 
         if unknown:
-            raise ValueError(
-                "Unknown workflow stages: "
-                f"{sorted(unknown)}"
-            )
+            raise ValueError("Unknown workflow stages: " f"{sorted(unknown)}")
 
         return [
             (
@@ -307,8 +249,7 @@ def select_stages(
     if target == "verify":
         return [
             (name, stage)
-            for name, stage
-            in stages.items()
+            for name, stage in stages.items()
             if bool(
                 stage.get(
                     "cache",
@@ -318,16 +259,9 @@ def select_stages(
         ]
 
     if target == "all":
-        return list(
-            stages.items()
-        )
+        return list(stages.items())
 
-    return [
-        (name, stage)
-        for name, stage
-        in stages.items()
-        if stage.get("group") == target
-    ]
+    return [(name, stage) for name, stage in stages.items() if stage.get("group") == target]
 
 
 def run_stage(
@@ -367,24 +301,16 @@ def run_stage(
             timestamp=timestamp,
         )
     ):
-        print(
-            "Artifacts already exist. "
-            "Skipping stage."
-        )
+        print("Artifacts already exist. " "Skipping stage.")
         return
 
-    raw_command = stage.get(
-        "command"
-    )
+    raw_command = stage.get("command")
 
     if not isinstance(
         raw_command,
         list,
     ):
-        raise TypeError(
-            f"Stage {stage_name!r} "
-            "requires a command list."
-        )
+        raise TypeError(f"Stage {stage_name!r} " "requires a command list.")
 
     command = [
         substitute_runtime_values(
@@ -394,10 +320,7 @@ def run_stage(
         for item in raw_command
     ]
 
-    print(
-        "Command:\n  "
-        + " \\\n    ".join(command)
-    )
+    print("Command:\n  " + " \\\n    ".join(command))
 
     if dry_run:
         print("Dry-run: command was not executed.")
@@ -415,9 +338,7 @@ def run_stage(
 
     if result.returncode != 0:
         raise RuntimeError(
-            f"Stage {stage_name!r} failed "
-            f"with exit code "
-            f"{result.returncode}."
+            f"Stage {stage_name!r} failed " f"with exit code " f"{result.returncode}."
         )
 
     if not validate_stage(
@@ -427,41 +348,28 @@ def run_stage(
         print_results=True,
     ):
         raise RuntimeError(
-            f"Stage {stage_name!r} finished, "
-            "but its expected artifacts "
-            "were not found."
+            f"Stage {stage_name!r} finished, " "but its expected artifacts " "were not found."
         )
 
-    print(
-        f"Stage {stage_name!r} completed."
-    )
+    print(f"Stage {stage_name!r} completed.")
 
 
 def main() -> None:
     args = parse_args()
 
-    config_path = Path(
-        args.config
-    ).resolve()
+    config_path = Path(args.config).resolve()
 
     config = load_config(
         config_path=config_path,
         overrides=args.overrides,
     )
 
-    project_root = Path(
-        str(config.project_root)
-    ).resolve()
+    project_root = Path(str(config.project_root)).resolve()
 
     if not project_root.is_dir():
-        raise NotADirectoryError(
-            f"Project root does not exist: "
-            f"{project_root}"
-        )
+        raise NotADirectoryError(f"Project root does not exist: " f"{project_root}")
 
-    timestamp = datetime.now().strftime(
-        "%Y-%m-%d_%H-%M-%S"
-    )
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     selected_stages = select_stages(
         config=config,
@@ -470,9 +378,7 @@ def main() -> None:
     )
 
     if not selected_stages:
-        raise RuntimeError(
-            "No workflow stages were selected."
-        )
+        raise RuntimeError("No workflow stages were selected.")
 
     print(
         "Workflow config:",
@@ -486,11 +392,7 @@ def main() -> None:
 
     print(
         "Selected stages:",
-        [
-            name
-            for name, _
-            in selected_stages
-        ],
+        [name for name, _ in selected_stages],
     )
 
     if args.target == "verify":
@@ -508,9 +410,7 @@ def main() -> None:
             )
 
             if not passed:
-                failed_stages.append(
-                    stage_name
-                )
+                failed_stages.append(stage_name)
 
         if failed_stages:
             print(
@@ -520,9 +420,7 @@ def main() -> None:
 
             sys.exit(1)
 
-        print(
-            "\nAll reusable artifacts are valid."
-        )
+        print("\nAll reusable artifacts are valid.")
         return
 
     for stage_name, stage in selected_stages:
