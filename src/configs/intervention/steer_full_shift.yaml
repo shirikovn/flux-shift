@@ -10,7 +10,12 @@ collector: null
 controller:
   _target_: src.shift.steering.TokenWiseSteeringController
 
+  vector_type: ${shift.vector_type}
+
   vector_directory: ${shift.artifacts_root}/dit/vectors
+
+  svm_normal_directory: >-
+    ${shift.artifacts_root}/svm_training/classifiers
 
   block_indices:
     - 0

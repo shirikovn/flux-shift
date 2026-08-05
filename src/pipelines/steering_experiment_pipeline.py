@@ -72,6 +72,13 @@ class SteeringExperimentPipeline:
             "transformer_class": (model_report.get("transformer_class")),
         }
 
+        controller = self.intervention_manager.controller
+
+        if controller is None:
+            raise RuntimeError("SteeringExperimentPipeline requires a steering controller.")
+
+        self.vector_configuration = controller.vector_configuration()
+
         self.output_store = RunOutputStore(
             output_dir=self.output_dir,
             config=resume_config,
@@ -510,6 +517,7 @@ class SteeringExperimentPipeline:
                 "blocks": blocks,
                 "steps": steps,
                 "use_classifier": (use_classifier),
+                "vector": self.vector_configuration,
                 "pooled": {
                     "enabled": use_pooled,
                     "strength": pooled_strength,
@@ -530,6 +538,7 @@ class SteeringExperimentPipeline:
             "seed": self.seed,
             "model": self.model_identity,
             "generation": self.generation_dict,
+            "vector": self.vector_configuration,
             "default_strengths": (self.strengths),
             "cases": self.cases,
             "schedules": self.schedules,

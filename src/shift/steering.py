@@ -8,7 +8,18 @@ import torch
 
 class TokenWiseSteeringController:
     """
-    Applies block-specific token-wise steering vectors.
+    Applies block-specific steering vectors.
+
+    Supported vector types:
+
+    tokenwise_difference:
+        Shape [tokens, channels].
+
+    token_mean_difference:
+        Shape [channels], broadcast across tokens.
+
+    svm_normal:
+        Shape [channels], broadcast across tokens.
 
     Static mode:
         effective_strength = strength
@@ -22,26 +33,44 @@ class TokenWiseSteeringController:
         "erase": -1.0,
     }
 
+    VECTOR_FILENAMES: dict[str, str] = {
+        "tokenwise_difference": "step_{step:02d}_vector.pt",
+        "token_mean_difference": "step_{step:02d}_token_mean_vector.pt",
+        "svm_normal": "step_{step:02d}_svm_normal.pt",
+    }
+
+    VECTOR_NDIMS: dict[str, int] = {
+        "tokenwise_difference": 2,
+        "token_mean_difference": 1,
+        "svm_normal": 1,
+    }
+
     def __init__(
         self,
         vector_paths: Mapping[Any, str] | None = None,
         vector_directory: str | None = None,
         block_indices: Sequence[int] | None = None,
         source_step: int = 0,
+        vector_type: str = "tokenwise_difference",
+        svm_normal_directory: str | None = None,
         operation: str = "erase",
         strength: float = 0.0,
         regularizer: Any | None = None,
         use_classifier: bool = False,
         validate_runtime: bool = False,
     ) -> None:
+        self.vector_type = self._validate_vector_type(vector_type)
+        self.source_step = int(source_step)
+
         resolved_paths = self._resolve_vector_paths(
             vector_paths=vector_paths,
             vector_directory=vector_directory,
+            svm_normal_directory=svm_normal_directory,
             block_indices=block_indices,
-            source_step=source_step,
+            source_step=self.source_step,
+            vector_type=self.vector_type,
         )
 
-        self.source_step = int(source_step)
         self.regularizer = regularizer
         self.validate_runtime = bool(validate_runtime)
 
@@ -82,39 +111,71 @@ class TokenWiseSteeringController:
             use_classifier=use_classifier,
         )
 
-    @staticmethod
+    @classmethod
+    def _validate_vector_type(cls, vector_type: str) -> str:
+        value = str(vector_type).strip()
+
+        if value not in cls.VECTOR_FILENAMES:
+            raise ValueError(
+                f"Unsupported vector_type={value!r}. "
+                f"Available types: {sorted(cls.VECTOR_FILENAMES)}"
+            )
+
+        return value
+
+    @classmethod
     def _resolve_vector_paths(
+        cls,
         vector_paths: Mapping[Any, str] | None,
         vector_directory: str | None,
+        svm_normal_directory: str | None,
         block_indices: Sequence[int] | None,
         source_step: int,
+        vector_type: str,
     ) -> dict[int, Path]:
         explicit_paths = vector_paths is not None and len(vector_paths) > 0
 
-        directory_configuration = vector_directory is not None or block_indices is not None
+        directory_configuration = (
+            vector_directory is not None
+            or svm_normal_directory is not None
+            or block_indices is not None
+        )
 
         if explicit_paths and directory_configuration:
-            raise ValueError("Specify either vector_paths or " "vector_directory + block_indices.")
+            raise ValueError(
+                "Specify either vector_paths or directory-based " "vector configuration."
+            )
 
         if explicit_paths:
             return {
                 int(raw_block): Path(str(raw_path)) for raw_block, raw_path in vector_paths.items()
             }
 
-        if vector_directory is None:
-            raise ValueError("vector_directory is required.")
-
         if block_indices is None:
             raise ValueError("block_indices is required.")
 
-        root = Path(vector_directory)
+        if not block_indices:
+            raise ValueError("At least one vector block is required.")
+
+        if vector_type == "svm_normal":
+            if svm_normal_directory is None:
+                raise ValueError(
+                    "svm_normal_directory is required when " "vector_type='svm_normal'."
+                )
+
+            root = Path(svm_normal_directory)
+        else:
+            if vector_directory is None:
+                raise ValueError(
+                    "vector_directory is required for " f"vector_type={vector_type!r}."
+                )
+
+            root = Path(vector_directory)
+
+        filename = cls.VECTOR_FILENAMES[vector_type].format(step=int(source_step))
 
         return {
-            int(block_index): (
-                root
-                / f"block_{int(block_index):02d}"
-                / (f"step_{int(source_step):02d}" "_vector.pt")
-            )
+            int(block_index): (root / f"block_{int(block_index):02d}" / filename)
             for block_index in block_indices
         }
 
@@ -150,9 +211,15 @@ class TokenWiseSteeringController:
         ):
             raise TypeError(f"Expected tensor in {path}.")
 
-        if value.ndim != 2:
+        expected_ndim = self.VECTOR_NDIMS[self.vector_type]
+
+        if value.ndim != expected_ndim:
+            expected_shape = "[tokens, channels]" if expected_ndim == 2 else "[channels]"
+
             raise RuntimeError(
-                "Expected vector shape " "[tokens, channels], got " f"{tuple(value.shape)}."
+                f"Vector type {self.vector_type!r} expects shape "
+                f"{expected_shape}, got {tuple(value.shape)} "
+                f"in {path}."
             )
 
         if not torch.isfinite(value).all():
@@ -170,6 +237,16 @@ class TokenWiseSteeringController:
     @property
     def available_blocks(self) -> set[int]:
         return set(self._cpu_vectors)
+
+    def vector_configuration(self) -> dict[str, Any]:
+        return {
+            "vector_type": self.vector_type,
+            "source_step": self.source_step,
+            "paths": {
+                str(block_index): self._vector_paths[block_index]
+                for block_index in sorted(self._vector_paths)
+            },
+        }
 
     def configure(
         self,
@@ -208,6 +285,43 @@ class TokenWiseSteeringController:
         self.operation = operation
         self.strength = strength
         self.use_classifier = next_use_classifier
+
+    def _validate_vector_shape(
+        self,
+        vector: torch.Tensor,
+        activation: torch.Tensor,
+    ) -> None:
+        num_tokens = int(activation.shape[1])
+        num_channels = int(activation.shape[2])
+
+        if vector.ndim == 2:
+            expected_shape = (
+                num_tokens,
+                num_channels,
+            )
+
+            if tuple(vector.shape) != expected_shape:
+                raise RuntimeError(
+                    "Token-wise vector and activation shape mismatch: "
+                    f"vector={tuple(vector.shape)}, "
+                    f"expected={expected_shape}, "
+                    f"activation={tuple(activation.shape)}."
+                )
+
+            return
+
+        if vector.ndim == 1:
+            if int(vector.shape[0]) != num_channels:
+                raise RuntimeError(
+                    "Channel vector and activation shape mismatch: "
+                    f"vector={tuple(vector.shape)}, "
+                    f"expected=({num_channels},), "
+                    f"activation={tuple(activation.shape)}."
+                )
+
+            return
+
+        raise RuntimeError(f"Unsupported runtime vector shape: {tuple(vector.shape)}.")
 
     def apply(
         self,
@@ -260,21 +374,25 @@ class TokenWiseSteeringController:
             activation=activation,
         )
 
-        expected_shape = tuple(activation.shape[1:])
-
-        if tuple(vector.shape) != expected_shape:
-            raise RuntimeError(
-                "Vector and activation shape "
-                "mismatch: "
-                f"vector={tuple(vector.shape)}, "
-                f"activation={tuple(activation.shape)}."
-            )
+        self._validate_vector_shape(
+            vector=vector,
+            activation=activation,
+        )
 
         sign = self.OPERATION_SIGNS[self.operation]
-
         scale = sign * effective_strength
 
-        steered = activation + scale * vector.unsqueeze(0)
+        if vector.ndim == 2:
+            # [tokens, channels] -> [1, tokens, channels]
+            steering_delta = vector.unsqueeze(0)
+        else:
+            # [channels] -> [1, 1, channels]
+            #
+            # PyTorch broadcasts this across batch and text-token
+            # dimensions without creating a repeated copy.
+            steering_delta = vector.view(1, 1, -1)
+
+        steered = activation + scale * steering_delta
 
         if self.validate_runtime and not torch.isfinite(steered).all():
             raise RuntimeError("Steered activation contains " "NaN or Inf.")
@@ -395,6 +513,7 @@ class TokenWiseSteeringController:
         eta_values = [record["eta_cls"] for record in self.classifier_by_location.values()]
 
         return {
+            "vector_type": self.vector_type,
             "operation": self.operation,
             "base_strength": self.strength,
             "use_classifier": (self.use_classifier),
@@ -413,6 +532,7 @@ class TokenWiseSteeringController:
     def summary(self) -> dict[str, Any]:
         return {
             "type": self.__class__.__name__,
+            "vector_type": self.vector_type,
             "source_step": self.source_step,
             "available_blocks": sorted(self.available_blocks),
             "statistics": self.statistics(),

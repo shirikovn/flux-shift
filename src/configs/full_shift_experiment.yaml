@@ -13,6 +13,12 @@ run_dir: ${hydra:runtime.output_dir}
 shift:
   artifacts_root: artifacts/cyberpunk
 
+  # Available:
+  #   tokenwise_difference
+  #   token_mean_difference
+  #   svm_normal
+  vector_type: tokenwise_difference
+
   schedule_name: early
 
   blocks:
