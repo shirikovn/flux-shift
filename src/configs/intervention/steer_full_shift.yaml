@@ -24,12 +24,7 @@ controller:
   svm_normal_directory: >-
     ${shift.artifacts_root}/svm_training/classifiers
 
-  block_indices:
-    - 0
-    - 1
-    - 2
-    - 3
-    - 4
+  block_indices: ${shift.artifact_blocks}
 
   operation: erase
   strength: 0.0
@@ -42,12 +37,7 @@ controller:
     classifier_directory: >-
       ${shift.artifacts_root}/svm_training/classifiers
 
-    block_indices:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
+    block_indices: ${shift.artifact_blocks}
 
     timing_mode: ${shift.classifier_timing.mode}
     source_step: ${shift.classifier_timing.source_step}

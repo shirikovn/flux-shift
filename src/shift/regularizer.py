@@ -348,37 +348,28 @@ class BlockwiseSVMRegularizer:
     ) -> str:
         return self._classifier_paths[location]
 
-    def summary(
-        self,
-    ) -> dict[str, Any]:
+    def configuration(self) -> dict[str, Any]:
         return {
-            "type": self.__class__.__name__,
             "classifier_directory": str(self.classifier_directory),
             "timing_mode": self.timing_mode,
             "source_step": (self.source_step if self.timing_mode == "shared" else None),
-            "step_indices": (self.step_indices if self.timing_mode == "per_step" else None),
+            "step_indices": (list(self.step_indices) if self.timing_mode == "per_step" else None),
             "eps": self.eps,
             "eta_max": self.eta_max,
+        }
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "type": self.__class__.__name__,
+            **self.configuration(),
             "available_blocks": sorted(self.available_blocks),
             "classifiers": [
                 {
                     "block": block_index,
                     "step": step_index,
-                    "path": (
-                        self._classifier_paths[
-                            (
-                                block_index,
-                                step_index,
-                            )
-                        ]
-                    ),
+                    "path": self._classifier_paths[(block_index, step_index)],
                     "positive_class_index": (
-                        self._positive_class_indices[
-                            (
-                                block_index,
-                                step_index,
-                            )
-                        ]
+                        self._positive_class_indices[(block_index, step_index)]
                     ),
                 }
                 for block_index, step_index in sorted(self._classifiers)

@@ -79,6 +79,8 @@ class SteeringExperimentPipeline:
 
         self.vector_configuration = controller.vector_configuration()
 
+        self.classifier_configuration = controller.classifier_configuration()
+
         self.output_store = RunOutputStore(
             output_dir=self.output_dir,
             config=resume_config,
@@ -516,7 +518,10 @@ class SteeringExperimentPipeline:
                 "strength": strength,
                 "blocks": blocks,
                 "steps": steps,
-                "use_classifier": (use_classifier),
+                "classifier": {
+                    "enabled": use_classifier,
+                    "configuration": (self.classifier_configuration if use_classifier else None),
+                },
                 "vector": self.vector_configuration,
                 "pooled": {
                     "enabled": use_pooled,
@@ -539,6 +544,7 @@ class SteeringExperimentPipeline:
             "model": self.model_identity,
             "generation": self.generation_dict,
             "vector": self.vector_configuration,
+            "classifier": self.classifier_configuration,
             "default_strengths": (self.strengths),
             "cases": self.cases,
             "schedules": self.schedules,

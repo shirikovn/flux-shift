@@ -23,9 +23,10 @@ blocks:
   - 17
   - 18
 
-# The collector captures step 0.
-# ActivationCollectionPipeline stops after this step and
-# returns latent output without running VAE decoding.
+# Collect all four FLUX.1-schnell diffusion steps.
+#
+# The pipeline skips VAE decoding. When only an early subset
+# is requested, it stops after the final requested step.
 steps:
   - 0
   - 1

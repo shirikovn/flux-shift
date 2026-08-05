@@ -119,6 +119,14 @@ class TokenWiseSteeringController:
     ) -> dict[str, Any]:
         return self.vector_store.configuration()
 
+    def classifier_configuration(
+        self,
+    ) -> dict[str, Any] | None:
+        if self.regularizer is None:
+            return None
+
+        return self.regularizer.configuration()
+
     def configure(
         self,
         operation: str,
