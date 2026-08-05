@@ -28,6 +28,9 @@ blocks:
 # returns latent output without running VAE decoding.
 steps:
   - 0
+  - 1
+  - 2
+  - 3
 
 controller: null
 pooled_controller: null

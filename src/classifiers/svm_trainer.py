@@ -38,7 +38,7 @@ class LinearSVMTrainer:
         dataset_dir: str,
         output_dir: str,
         block_indices: Sequence[int],
-        source_step: int = 0,
+        step_indices: Sequence[int] = (0,),
         validation_fraction: float = 0.2,
         random_seed: int = 123,
         c: float = 1.0,
@@ -49,9 +49,10 @@ class LinearSVMTrainer:
         self.dataset_dir = Path(dataset_dir)
         self.output_dir = Path(output_dir)
 
-        self.block_indices = [int(value) for value in block_indices]
+        self.block_indices = sorted({int(value) for value in block_indices})
 
-        self.source_step = int(source_step)
+        self.step_indices = sorted({int(value) for value in step_indices})
+
         self.validation_fraction = float(validation_fraction)
         self.random_seed = int(random_seed)
 
@@ -61,10 +62,16 @@ class LinearSVMTrainer:
         self.probability = bool(probability)
 
         if not self.dataset_dir.is_dir():
-            raise FileNotFoundError(f"SVM dataset directory does not exist: " f"{self.dataset_dir}")
+            raise FileNotFoundError("SVM dataset directory does not exist: " f"{self.dataset_dir}")
 
         if not self.block_indices:
             raise ValueError("At least one block index is required.")
+
+        if not self.step_indices:
+            raise ValueError("At least one SVM step index is required.")
+
+        if self.step_indices[0] < 0:
+            raise ValueError("SVM step indices must be nonnegative.")
 
         if not 0.0 < self.validation_fraction < 1.0:
             raise ValueError("validation_fraction must be between 0 and 1.")
@@ -83,12 +90,16 @@ class LinearSVMTrainer:
             exist_ok=True,
         )
 
-        block_results: list[dict[str, Any]] = []
+        location_results: list[dict[str, Any]] = []
 
         for block_index in self.block_indices:
-            result = self._train_block(block_index)
+            for step_index in self.step_indices:
+                result = self._train_location(
+                    block_index=block_index,
+                    step_index=step_index,
+                )
 
-            block_results.append(result)
+                location_results.append(result)
 
         summary = {
             "classifier_type": ("standardized_linear_svc" if self.standardize else "linear_svc"),
@@ -96,13 +107,15 @@ class LinearSVMTrainer:
             "probability": self.probability,
             "positive_class_label": 1,
             "negative_class_label": 0,
-            "source_step": self.source_step,
+            "step_indices": self.step_indices,
             "validation_fraction": (self.validation_fraction),
             "random_seed": self.random_seed,
             "c": self.c,
             "class_weight": self.class_weight,
-            "num_blocks": len(block_results),
-            "blocks": block_results,
+            "num_blocks": len(self.block_indices),
+            "num_steps": len(self.step_indices),
+            "num_locations": len(location_results),
+            "locations": location_results,
         }
 
         summary_path = self.output_dir / "metadata.yaml"
@@ -115,12 +128,15 @@ class LinearSVMTrainer:
         return {
             "output_dir": str(self.output_dir),
             "metadata_path": str(summary_path),
-            "num_blocks": len(block_results),
+            "num_blocks": len(self.block_indices),
+            "num_steps": len(self.step_indices),
+            "num_locations": len(location_results),
         }
 
-    def _train_block(
+    def _train_location(
         self,
         block_index: int,
+        step_index: int,
     ) -> dict[str, Any]:
         (
             features,
@@ -128,6 +144,7 @@ class LinearSVMTrainer:
             samples,
         ) = self._load_dataset(
             block_index=block_index,
+            step_index=step_index,
         )
 
         groups = np.asarray([str(sample["pair_name"]) for sample in samples])
@@ -205,7 +222,7 @@ class LinearSVMTrainer:
             exist_ok=True,
         )
 
-        prefix = f"step_{self.source_step:02d}"
+        prefix = f"step_{step_index:02d}"
 
         classifier_path = block_dir / f"{prefix}_classifier.joblib"
         metrics_path = block_dir / f"{prefix}_metrics.yaml"
@@ -222,7 +239,7 @@ class LinearSVMTrainer:
 
         metrics_document = {
             "block_index": block_index,
-            "source_step": self.source_step,
+            "step_index": step_index,
             "feature_dimension": int(features.shape[1]),
             "num_samples": int(features.shape[0]),
             "num_pairs": len(set(groups)),
@@ -256,14 +273,14 @@ class LinearSVMTrainer:
 
         return {
             "block_index": block_index,
-            "source_step": self.source_step,
+            "step_index": step_index,
             "classifier_path": str(classifier_path),
             "svm_normal_path": str(svm_normal_path),
             "metrics_path": str(metrics_path),
             "split_path": str(split_path),
-            "validation_accuracy": (validation_metrics["accuracy"]),
+            "validation_accuracy": validation_metrics["accuracy"],
             "validation_balanced_accuracy": (validation_metrics["balanced_accuracy"]),
-            "validation_roc_auc": (validation_metrics["roc_auc"]),
+            "validation_roc_auc": validation_metrics["roc_auc"],
             "validation_probability_gap": (validation_metrics["probability_gap"]),
         }
 
@@ -376,6 +393,7 @@ class LinearSVMTrainer:
     def _load_dataset(
         self,
         block_index: int,
+        step_index: int,
     ) -> tuple[
         np.ndarray,
         np.ndarray,
@@ -383,7 +401,7 @@ class LinearSVMTrainer:
     ]:
         block_dir = self.dataset_dir / f"block_{block_index:02d}"
 
-        prefix = f"step_{self.source_step:02d}"
+        prefix = f"step_{step_index:02d}"
 
         features_path = block_dir / f"{prefix}_features.pt"
 

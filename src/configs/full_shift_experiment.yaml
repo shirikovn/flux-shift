@@ -18,7 +18,7 @@ shift:
   #   token_mean_difference
   #   svm_normal
   vector_type: tokenwise_difference
-
+  
   vector_timing:
     # shared:
     #   use one source step for every runtime step
@@ -29,6 +29,22 @@ shift:
     # custom:
     #   use intervention.controller.vector_paths
     mode: shared
+
+    source_step: 0
+
+    steps:
+      - 0
+      - 1
+      - 2
+      - 3
+    
+  classifier_timing:
+    # shared:
+    #   every runtime step uses the source-step classifier
+    #
+    # per_step:
+    #   runtime step t uses classifier t
+    mode: per_step
 
     source_step: 0
 

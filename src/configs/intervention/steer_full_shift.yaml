@@ -49,7 +49,10 @@ controller:
       - 3
       - 4
 
-    source_step: 0
+    timing_mode: ${shift.classifier_timing.mode}
+    source_step: ${shift.classifier_timing.source_step}
+    step_indices: ${shift.classifier_timing.steps}
+
     eps: 1.0e-6
     eta_max: ${shift.eta_max}
 

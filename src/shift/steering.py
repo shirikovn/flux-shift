@@ -73,6 +73,9 @@ class TokenWiseSteeringController:
         self.regularizer = regularizer
         self.validate_runtime = bool(validate_runtime)
 
+        self._active_blocks: tuple[int, ...] | None = None
+        self._active_steps: tuple[int, ...] | None = None
+
         self.operation = "erase"
         self.strength = 0.0
         self.use_classifier = False
@@ -101,6 +104,16 @@ class TokenWiseSteeringController:
             steps=steps,
         )
 
+        self._active_blocks = None if blocks is None else tuple(int(value) for value in blocks)
+
+        self._active_steps = None if steps is None else tuple(int(value) for value in steps)
+
+        if self.use_classifier and self.regularizer is not None:
+            self.regularizer.validate_locations(
+                blocks=blocks,
+                steps=steps,
+            )
+
     def vector_configuration(
         self,
     ) -> dict[str, Any]:
@@ -125,7 +138,18 @@ class TokenWiseSteeringController:
         )
 
         if next_use_classifier and self.regularizer is None:
-            raise ValueError("use_classifier=True requires " "a regularizer.")
+            raise ValueError("use_classifier=True requires a regularizer.")
+
+        if (
+            next_use_classifier
+            and self.regularizer is not None
+            and self._active_blocks is not None
+            and self._active_steps is not None
+        ):
+            self.regularizer.validate_locations(
+                blocks=self._active_blocks,
+                steps=self._active_steps,
+            )
 
         # For this reproduction stage we use the
         # classifier only for concept erasure.
@@ -207,18 +231,28 @@ class TokenWiseSteeringController:
         effective_strength = self.strength
 
         if self.use_classifier:
-            p_cls, eta_cls = self.regularizer.predict(
+            (
+                p_cls,
+                eta_cls,
+                classifier_source,
+            ) = self.regularizer.predict(
                 block_index=block_index,
+                step_index=step_index,
                 activation=activation,
             )
 
             effective_strength *= eta_cls
 
+            source_block, source_step = classifier_source
+
             self.classifier_by_location[location] = {
                 "p_cls": p_cls,
                 "eta_cls": eta_cls,
-                "base_strength": (self.strength),
-                "effective_strength": (effective_strength),
+                "base_strength": self.strength,
+                "effective_strength": effective_strength,
+                "source_block": source_block,
+                "source_step": source_step,
+                "path": self.regularizer.path_for(classifier_source),
             }
 
         if effective_strength == 0.0:
@@ -319,7 +353,7 @@ class TokenWiseSteeringController:
 
         self.classifier_by_location: dict[
             str,
-            dict[str, float],
+            dict[str, Any],
         ] = {}
 
         self.vector_source_by_location: dict[
