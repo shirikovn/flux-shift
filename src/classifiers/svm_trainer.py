@@ -196,6 +196,8 @@ class LinearSVMTrainer:
             labels,
         )
 
+        svm_normal, svm_normal_metadata = self._extract_svm_normal(final_model)
+
         block_dir = self.output_dir / f"block_{block_index:02d}"
 
         block_dir.mkdir(
@@ -206,16 +208,17 @@ class LinearSVMTrainer:
         prefix = f"step_{self.source_step:02d}"
 
         classifier_path = block_dir / f"{prefix}_classifier.joblib"
-
         metrics_path = block_dir / f"{prefix}_metrics.yaml"
-
         split_path = block_dir / f"{prefix}_split.yaml"
+        svm_normal_path = block_dir / f"{prefix}_svm_normal.pt"
 
         joblib.dump(
             value=final_model,
             filename=classifier_path,
             compress=3,
         )
+
+        torch.save(svm_normal, svm_normal_path)
 
         metrics_document = {
             "block_index": block_index,
@@ -230,6 +233,10 @@ class LinearSVMTrainer:
             "train": train_metrics,
             "validation": validation_metrics,
             "classifier_path": str(classifier_path),
+            "svm_normal": {
+                **svm_normal_metadata,
+                "path": str(svm_normal_path),
+            },
         }
 
         OmegaConf.save(
@@ -251,6 +258,7 @@ class LinearSVMTrainer:
             "block_index": block_index,
             "source_step": self.source_step,
             "classifier_path": str(classifier_path),
+            "svm_normal_path": str(svm_normal_path),
             "metrics_path": str(metrics_path),
             "split_path": str(split_path),
             "validation_accuracy": (validation_metrics["accuracy"]),
@@ -284,6 +292,86 @@ class LinearSVMTrainer:
         )
 
         return Pipeline(pipeline_steps)
+
+    @staticmethod
+    def _extract_svm_normal(
+        model: Pipeline,
+    ) -> tuple[torch.Tensor, dict[str, Any]]:
+        """
+        Extract the normalized linear-SVM normal in the original
+        activation coordinate system.
+
+        If StandardScaler is present, SVC coefficients are defined
+        in standardized coordinates and must be divided by the
+        per-feature scale.
+        """
+        svm = model.named_steps.get("svm")
+
+        if not isinstance(svm, SVC):
+            raise TypeError("Expected the pipeline step 'svm' to be an SVC.")
+
+        classes = [int(value) for value in svm.classes_.tolist()]
+
+        if classes != [0, 1]:
+            raise RuntimeError("Expected SVM class order [0, 1], " f"received {classes}.")
+
+        coefficients = np.asarray(
+            svm.coef_,
+            dtype=np.float64,
+        )
+
+        if coefficients.ndim != 2 or coefficients.shape[0] != 1:
+            raise RuntimeError(
+                "Expected one binary linear-SVM normal, got " f"shape {coefficients.shape}."
+            )
+
+        normal = coefficients[0].copy()
+        standardized = "scaler" in model.named_steps
+
+        if standardized:
+            scaler = model.named_steps["scaler"]
+
+            if not isinstance(scaler, StandardScaler):
+                raise TypeError("Expected the pipeline step 'scaler' to be " "a StandardScaler.")
+
+            scale = np.asarray(
+                scaler.scale_,
+                dtype=np.float64,
+            )
+
+            if scale.shape != normal.shape:
+                raise RuntimeError(
+                    "SVM normal and StandardScaler scale have "
+                    "different shapes: "
+                    f"normal={normal.shape}, scale={scale.shape}."
+                )
+
+            if not np.isfinite(scale).all() or np.any(scale <= 0):
+                raise RuntimeError("StandardScaler contains invalid scale values.")
+
+            normal = normal / scale
+
+        if not np.isfinite(normal).all():
+            raise RuntimeError("SVM normal contains NaN or Inf.")
+
+        raw_norm = float(np.linalg.norm(normal))
+
+        if raw_norm <= 1.0e-12:
+            raise RuntimeError("The fitted SVM has a zero-length normal.")
+
+        normal = normal / raw_norm
+
+        normal_tensor = torch.from_numpy(normal.astype(np.float32))
+
+        return normal_tensor, {
+            "shape": list(normal_tensor.shape),
+            "dtype": str(normal_tensor.dtype),
+            "space": "raw_activation_space",
+            "standardization_compensated": standardized,
+            "class_direction": "class_0_to_class_1",
+            "raw_l2_norm": raw_norm,
+            "normalized_l2_norm": float(normal_tensor.norm().item()),
+        }
 
     def _load_dataset(
         self,

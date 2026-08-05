@@ -217,88 +217,107 @@ class MeanDifferenceCollector:
     def save(self) -> Path:
         if self._pending_negatives:
             missing = sorted(self._pending_negatives)
-
             raise RuntimeError(
-                "Some negative activations have no " "matching positive activations: " f"{missing}"
+                "Some negative activations have no matching " f"positive activations: {missing}"
             )
 
         if not self._difference_sums:
-            raise RuntimeError("No activation differences were " "collected.")
+            raise RuntimeError("No activation differences were collected.")
 
-        self.save_dir.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
+        self.save_dir.mkdir(parents=True, exist_ok=True)
 
         location_metadata: list[dict[str, Any]] = []
 
         for location_key in sorted(self._difference_sums):
             block_index, step_index = location_key
-
             count = self._pair_counts[location_key]
 
             if count <= 0:
-                raise RuntimeError("Invalid pair count for " f"{location_key}: {count}")
+                raise RuntimeError(f"Invalid pair count for {location_key}: {count}")
 
             mean_difference = self._difference_sums[location_key] / count
 
-            # Current stage assumes batch size = 1.
-            raw_vector = mean_difference.squeeze(0)
+            # Shape: [tokens, channels].
+            tokenwise_raw = mean_difference.squeeze(0)
+            tokenwise_vector = self._normalize(tokenwise_raw)
 
-            vector = self._normalize(raw_vector)
+            # Shape: [channels].
+            #
+            # This is the prompt-pair mean difference followed by
+            # averaging over text-token positions.
+            token_mean_raw = tokenwise_raw.mean(dim=0)
+            token_mean_vector = self._normalize(token_mean_raw)
 
             block_dir = self.save_dir / f"block_{block_index:02d}"
-            block_dir.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
+            block_dir.mkdir(parents=True, exist_ok=True)
 
-            raw_filename = f"step_{step_index:02d}" "_raw_difference.pt"
+            prefix = f"step_{step_index:02d}"
 
-            vector_filename = f"step_{step_index:02d}" "_vector.pt"
+            # Keep the original filenames for backward compatibility.
+            artifacts = {
+                "raw_difference": tokenwise_raw,
+                "vector": tokenwise_vector,
+                "token_mean_raw_difference": token_mean_raw,
+                "token_mean_vector": token_mean_vector,
+            }
 
-            raw_path = block_dir / raw_filename
-            vector_path = block_dir / vector_filename
+            artifact_paths: dict[str, Path] = {}
 
-            torch.save(
-                raw_vector,
-                raw_path,
-            )
-            torch.save(
-                vector,
-                vector_path,
-            )
+            for artifact_name, tensor in artifacts.items():
+                path = block_dir / f"{prefix}_{artifact_name}.pt"
+                torch.save(tensor, path)
+                artifact_paths[artifact_name] = path
 
-            token_norms = vector.norm(dim=-1)
+            token_norms = tokenwise_vector.norm(dim=-1)
 
             location_metadata.append(
                 {
-                    "block_index": (block_index),
+                    "block_index": block_index,
                     "step_index": step_index,
-                    "timestep": (self._timesteps[location_key]),
-                    "num_prompt_pairs": (count),
-                    "pair_names": (self._pair_names[location_key]),
-                    "raw_shape": list(raw_vector.shape),
-                    "vector_shape": list(vector.shape),
-                    "raw_dtype": str(raw_vector.dtype),
-                    "vector_dtype": str(vector.dtype),
-                    "raw_mean_abs": float(raw_vector.abs().mean().item()),
-                    "raw_l2_norm": float(raw_vector.norm().item()),
-                    "token_norm_min": float(token_norms.min().item()),
-                    "token_norm_mean": float(token_norms.mean().item()),
-                    "token_norm_max": float(token_norms.max().item()),
-                    "raw_difference_path": (str(raw_path)),
-                    "vector_path": (str(vector_path)),
+                    "timestep": self._timesteps[location_key],
+                    "num_prompt_pairs": count,
+                    "pair_names": self._pair_names[location_key],
+                    "tokenwise_difference": {
+                        "raw_shape": list(tokenwise_raw.shape),
+                        "vector_shape": list(tokenwise_vector.shape),
+                        "raw_l2_norm": float(tokenwise_raw.norm().item()),
+                        "token_norm_min": float(token_norms.min().item()),
+                        "token_norm_mean": float(token_norms.mean().item()),
+                        "token_norm_max": float(token_norms.max().item()),
+                        "raw_path": str(artifact_paths["raw_difference"]),
+                        "vector_path": str(artifact_paths["vector"]),
+                    },
+                    "token_mean_difference": {
+                        "raw_shape": list(token_mean_raw.shape),
+                        "vector_shape": list(token_mean_vector.shape),
+                        "raw_l2_norm": float(token_mean_raw.norm().item()),
+                        "vector_l2_norm": float(token_mean_vector.norm().item()),
+                        "raw_path": str(artifact_paths["token_mean_raw_difference"]),
+                        "vector_path": str(artifact_paths["token_mean_vector"]),
+                    },
                 }
             )
 
+        normalization = "channel_l2" if self.normalize else "none"
+
         metadata = {
             "concept_name": self.concept_name,
-            "estimator": ("token_wise_mean_difference"),
-            "difference_direction": ("positive_minus_negative"),
-            "normalization": ("per_token_channel_l2" if self.normalize else "none"),
-            "eps": self.eps,
+            "difference_direction": "positive_minus_negative",
             "tensor_dtype": str(self.tensor_dtype),
+            "eps": self.eps,
+            "vector_types": {
+                "tokenwise_difference": {
+                    "shape": "[tokens, channels]",
+                    "normalization": normalization,
+                    "filename": "step_XX_vector.pt",
+                },
+                "token_mean_difference": {
+                    "shape": "[channels]",
+                    "pooling": "mean_over_text_tokens",
+                    "normalization": normalization,
+                    "filename": "step_XX_token_mean_vector.pt",
+                },
+            },
             "locations": location_metadata,
         }
 
