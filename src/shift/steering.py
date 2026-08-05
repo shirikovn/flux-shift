@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 import torch
+
+from src.shift.vector_store import (
+    SteeringVectorStore,
+)
 
 
 class TokenWiseSteeringController:
@@ -33,71 +37,41 @@ class TokenWiseSteeringController:
         "erase": -1.0,
     }
 
-    VECTOR_FILENAMES: dict[str, str] = {
-        "tokenwise_difference": "step_{step:02d}_vector.pt",
-        "token_mean_difference": "step_{step:02d}_token_mean_vector.pt",
-        "svm_normal": "step_{step:02d}_svm_normal.pt",
-    }
-
-    VECTOR_NDIMS: dict[str, int] = {
-        "tokenwise_difference": 2,
-        "token_mean_difference": 1,
-        "svm_normal": 1,
-    }
-
     def __init__(
         self,
-        vector_paths: Mapping[Any, str] | None = None,
+        vector_paths: Mapping[Any, Any] | None = None,
         vector_directory: str | None = None,
-        block_indices: Sequence[int] | None = None,
-        source_step: int = 0,
-        vector_type: str = "tokenwise_difference",
         svm_normal_directory: str | None = None,
+        block_indices: Sequence[int] | None = None,
+        step_indices: Sequence[int] | None = None,
+        source_step: int = 0,
+        timing_mode: str = "shared",
+        vector_type: str = "tokenwise_difference",
         operation: str = "erase",
         strength: float = 0.0,
         regularizer: Any | None = None,
         use_classifier: bool = False,
         validate_runtime: bool = False,
     ) -> None:
-        self.vector_type = self._validate_vector_type(vector_type)
-        self.source_step = int(source_step)
-
-        resolved_paths = self._resolve_vector_paths(
+        self.vector_store = SteeringVectorStore(
+            vector_type=vector_type,
+            timing_mode=timing_mode,
             vector_paths=vector_paths,
             vector_directory=vector_directory,
-            svm_normal_directory=svm_normal_directory,
+            svm_normal_directory=(svm_normal_directory),
             block_indices=block_indices,
-            source_step=self.source_step,
-            vector_type=self.vector_type,
+            step_indices=step_indices,
+            source_step=source_step,
         )
+
+        self.vector_type = self.vector_store.vector_type
+
+        self.timing_mode = self.vector_store.timing_mode
+
+        self.source_step = self.vector_store.source_step
 
         self.regularizer = regularizer
         self.validate_runtime = bool(validate_runtime)
-
-        self._cpu_vectors: dict[
-            int,
-            torch.Tensor,
-        ] = {}
-
-        self._vector_paths: dict[
-            int,
-            str,
-        ] = {}
-
-        for block_index, path in sorted(resolved_paths.items()):
-            vector = self._load_vector(
-                block_index=block_index,
-                path=path,
-            )
-
-            self._cpu_vectors[block_index] = vector
-
-            self._vector_paths[block_index] = str(path)
-
-        self._runtime_cache: dict[
-            tuple[int, str, torch.dtype],
-            torch.Tensor,
-        ] = {}
 
         self.operation = "erase"
         self.strength = 0.0
@@ -111,142 +85,26 @@ class TokenWiseSteeringController:
             use_classifier=use_classifier,
         )
 
-    @classmethod
-    def _validate_vector_type(cls, vector_type: str) -> str:
-        value = str(vector_type).strip()
-
-        if value not in cls.VECTOR_FILENAMES:
-            raise ValueError(
-                f"Unsupported vector_type={value!r}. "
-                f"Available types: {sorted(cls.VECTOR_FILENAMES)}"
-            )
-
-        return value
-
-    @classmethod
-    def _resolve_vector_paths(
-        cls,
-        vector_paths: Mapping[Any, str] | None,
-        vector_directory: str | None,
-        svm_normal_directory: str | None,
-        block_indices: Sequence[int] | None,
-        source_step: int,
-        vector_type: str,
-    ) -> dict[int, Path]:
-        explicit_paths = vector_paths is not None and len(vector_paths) > 0
-
-        directory_configuration = (
-            vector_directory is not None
-            or svm_normal_directory is not None
-            or block_indices is not None
-        )
-
-        if explicit_paths and directory_configuration:
-            raise ValueError(
-                "Specify either vector_paths or directory-based " "vector configuration."
-            )
-
-        if explicit_paths:
-            return {
-                int(raw_block): Path(str(raw_path)) for raw_block, raw_path in vector_paths.items()
-            }
-
-        if block_indices is None:
-            raise ValueError("block_indices is required.")
-
-        if not block_indices:
-            raise ValueError("At least one vector block is required.")
-
-        if vector_type == "svm_normal":
-            if svm_normal_directory is None:
-                raise ValueError(
-                    "svm_normal_directory is required when " "vector_type='svm_normal'."
-                )
-
-            root = Path(svm_normal_directory)
-        else:
-            if vector_directory is None:
-                raise ValueError(
-                    "vector_directory is required for " f"vector_type={vector_type!r}."
-                )
-
-            root = Path(vector_directory)
-
-        filename = cls.VECTOR_FILENAMES[vector_type].format(step=int(source_step))
-
-        return {
-            int(block_index): (root / f"block_{int(block_index):02d}" / filename)
-            for block_index in block_indices
-        }
-
-    @staticmethod
-    def _torch_load(
-        path: Path,
-    ) -> Any:
-        try:
-            return torch.load(
-                path,
-                map_location="cpu",
-                weights_only=True,
-            )
-        except TypeError:
-            return torch.load(
-                path,
-                map_location="cpu",
-            )
-
-    def _load_vector(
-        self,
-        block_index: int,
-        path: Path,
-    ) -> torch.Tensor:
-        if not path.is_file():
-            raise FileNotFoundError(f"Vector for block {block_index} " f"does not exist: {path}")
-
-        value = self._torch_load(path)
-
-        if not isinstance(
-            value,
-            torch.Tensor,
-        ):
-            raise TypeError(f"Expected tensor in {path}.")
-
-        expected_ndim = self.VECTOR_NDIMS[self.vector_type]
-
-        if value.ndim != expected_ndim:
-            expected_shape = "[tokens, channels]" if expected_ndim == 2 else "[channels]"
-
-            raise RuntimeError(
-                f"Vector type {self.vector_type!r} expects shape "
-                f"{expected_shape}, got {tuple(value.shape)} "
-                f"in {path}."
-            )
-
-        if not torch.isfinite(value).all():
-            raise RuntimeError(f"Vector in {path} contains " "NaN or Inf.")
-
-        return (
-            value.detach()
-            .to(
-                device="cpu",
-                dtype=torch.float32,
-            )
-            .contiguous()
-        )
-
     @property
-    def available_blocks(self) -> set[int]:
-        return set(self._cpu_vectors)
+    def available_blocks(
+        self,
+    ) -> set[int]:
+        return self.vector_store.available_blocks
 
-    def vector_configuration(self) -> dict[str, Any]:
-        return {
-            "vector_type": self.vector_type,
-            "source_step": self.source_step,
-            "paths": {
-                str(block_index): self._vector_paths[block_index]
-                for block_index in sorted(self._vector_paths)
-            },
-        }
+    def validate_locations(
+        self,
+        blocks: Sequence[int] | None,
+        steps: Sequence[int] | None,
+    ) -> None:
+        self.vector_store.validate_locations(
+            blocks=blocks,
+            steps=steps,
+        )
+
+    def vector_configuration(
+        self,
+    ) -> dict[str, Any]:
+        return self.vector_store.configuration()
 
     def configure(
         self,
@@ -334,9 +192,6 @@ class TokenWiseSteeringController:
         if self.strength == 0.0:
             return activation
 
-        if block_index not in self._cpu_vectors:
-            raise KeyError(f"No vector loaded for block " f"{block_index}.")
-
         if activation.ndim != 3:
             raise RuntimeError(
                 "Expected activation shape "
@@ -369,9 +224,11 @@ class TokenWiseSteeringController:
         if effective_strength == 0.0:
             return activation
 
-        vector = self._get_runtime_vector(
+        vector, source_location = self.vector_store.get(
             block_index=block_index,
-            activation=activation,
+            runtime_step=step_index,
+            device=activation.device,
+            dtype=activation.dtype,
         )
 
         self._validate_vector_shape(
@@ -417,6 +274,14 @@ class TokenWiseSteeringController:
 
         self.effective_strength_by_location[location] = effective_strength
 
+        source_block, source_step = source_location
+
+        self.vector_source_by_location[location] = {
+            "source_block": source_block,
+            "source_step": ("*" if source_step == self.vector_store.WILDCARD_STEP else source_step),
+            "path": self.vector_store.path_for(source_location),
+        }
+
         return steered
 
     @staticmethod
@@ -432,32 +297,6 @@ class TokenWiseSteeringController:
         delta_norm = abs(effective_strength) * vector_norm
 
         return float(delta_norm / max(activation_norm, 1.0e-8))
-
-    def _get_runtime_vector(
-        self,
-        block_index: int,
-        activation: torch.Tensor,
-    ) -> torch.Tensor:
-        cache_key = (
-            block_index,
-            str(activation.device),
-            activation.dtype,
-        )
-
-        cached = self._runtime_cache.get(cache_key)
-
-        if cached is not None:
-            return cached
-
-        vector = self._cpu_vectors[block_index].to(
-            device=activation.device,
-            dtype=activation.dtype,
-            non_blocking=True,
-        )
-
-        self._runtime_cache[cache_key] = vector
-
-        return vector
 
     def reset_statistics(self) -> None:
         self.total_calls = 0
@@ -483,8 +322,13 @@ class TokenWiseSteeringController:
             dict[str, float],
         ] = {}
 
+        self.vector_source_by_location: dict[
+            str,
+            dict[str, Any],
+        ] = {}
+
     def clear_runtime_cache(self) -> None:
-        self._runtime_cache.clear()
+        self.vector_store.clear_runtime_cache()
 
     @staticmethod
     def _summary_values(
@@ -514,6 +358,8 @@ class TokenWiseSteeringController:
 
         return {
             "vector_type": self.vector_type,
+            "timing_mode": self.timing_mode,
+            "vector_source_by_location": dict(self.vector_source_by_location),
             "operation": self.operation,
             "base_strength": self.strength,
             "use_classifier": (self.use_classifier),
@@ -529,19 +375,16 @@ class TokenWiseSteeringController:
             "relative_scale": (self._summary_values(relative_scales)),
         }
 
-    def summary(self) -> dict[str, Any]:
+    def summary(
+        self,
+    ) -> dict[str, Any]:
         return {
             "type": self.__class__.__name__,
             "vector_type": self.vector_type,
-            "source_step": self.source_step,
+            "timing_mode": self.timing_mode,
+            "source_step": (self.source_step if self.timing_mode == "shared" else None),
             "available_blocks": sorted(self.available_blocks),
+            "vector_store": (self.vector_store.summary()),
             "statistics": self.statistics(),
             "regularizer": (self.regularizer.summary() if self.regularizer is not None else None),
-            "vectors": {
-                str(block_index): {
-                    "path": (self._vector_paths[block_index]),
-                    "shape": list(self._cpu_vectors[block_index].shape),
-                }
-                for block_index in sorted(self._cpu_vectors)
-            },
         }

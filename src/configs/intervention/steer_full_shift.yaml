@@ -12,6 +12,13 @@ controller:
 
   vector_type: ${shift.vector_type}
 
+  timing_mode: ${shift.vector_timing.mode}
+  source_step: ${shift.vector_timing.source_step}
+  step_indices: ${shift.vector_timing.steps}
+
+  # Used only when timing_mode=custom.
+  vector_paths: null
+
   vector_directory: ${shift.artifacts_root}/dit/vectors
 
   svm_normal_directory: >-
@@ -23,8 +30,6 @@ controller:
     - 2
     - 3
     - 4
-
-  source_step: 0
 
   operation: erase
   strength: 0.0

@@ -19,6 +19,25 @@ shift:
   #   svm_normal
   vector_type: tokenwise_difference
 
+  vector_timing:
+    # shared:
+    #   use one source step for every runtime step
+    #
+    # per_step:
+    #   runtime step t uses the vector collected at step t
+    #
+    # custom:
+    #   use intervention.controller.vector_paths
+    mode: shared
+
+    source_step: 0
+
+    steps:
+      - 0
+      - 1
+      - 2
+      - 3
+
   schedule_name: early
 
   blocks:

@@ -151,15 +151,11 @@ class ShiftInterventionManager:
         blocks: list[int] | None,
         steps: list[int] | None,
     ) -> None:
-        if self.controller is not None and blocks is not None:
-            requested_blocks = {int(value) for value in blocks}
-
-            missing_blocks = requested_blocks - self.controller.available_blocks
-
-            if missing_blocks:
-                raise ValueError(
-                    "No steering vectors loaded for " f"blocks: {sorted(missing_blocks)}"
-                )
+        if self.controller is not None:
+            self.controller.validate_locations(
+                blocks=blocks,
+                steps=steps,
+            )
 
         self.state.set_active_locations(
             blocks=blocks,
