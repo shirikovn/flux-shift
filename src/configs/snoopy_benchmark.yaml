@@ -1,0 +1,183 @@
+defaults:
+  - model: flux_schnell_cluster
+  - generation: schnell_1024
+  - intervention: steer_full_shift
+  - pipeline: steering_experiment
+  - _self_
+
+# Replaced by snoopy_benchmark.py according to task_id.
+seed: 0
+device: cuda
+
+run_dir: ${hydra:runtime.output_dir}
+
+shift:
+  artifacts_root: artifacts/snoopy
+
+  # Table 6 calls this "diff sep":
+  # token-wise difference.
+  vector_type: tokenwise_difference
+
+  # One step-0 vector reused at every runtime timestep.
+  vector_timing:
+    mode: shared
+    source_step: 0
+    steps:
+      - 0
+      - 1
+      - 2
+      - 3
+
+  # Classifier evaluates the current timestep.
+  classifier_timing:
+    mode: per_step
+    source_step: 0
+    steps:
+      - 0
+      - 1
+      - 2
+      - 3
+
+  artifact_blocks:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
+    - 11
+    - 12
+    - 13
+    - 14
+    - 15
+    - 16
+    - 17
+    - 18
+
+  # Reproduction hypothesis for Table 3:
+  # steer every FLUX double-stream block.
+  blocks:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
+    - 11
+    - 12
+    - 13
+    - 14
+    - 15
+    - 16
+    - 17
+    - 18
+
+  steps:
+    - 0
+    - 1
+    - 2
+    - 3
+
+  dit_gamma: 500.0
+  pooled_gamma: 6.0
+
+  # Keep the value already used by your implementation.
+  # The paper defines eta_max but does not numerically specify
+  # it in the method description.
+  eta_max: 4.0
+
+
+benchmark:
+  # Slurm sets this automatically.
+  # Outside Slurm it defaults to task 0.
+  task_id: ${oc.env:SLURM_ARRAY_TASK_ID,0}
+
+  output_root: outputs/snoopy_table3
+
+  # Useful for a tiny smoke test:
+  # python snoopy_benchmark.py benchmark.num_templates=4
+  num_templates: 80
+
+  # Paper says nine seeds but doesn't enumerate them.
+  # These are the nine values in the authors' released
+  # FID evaluation code.
+  seeds:
+    - 10
+    - 20
+    - 30
+    - 42
+    - 50
+    - 60
+    - 70
+    - 80
+    - 90
+
+  # One Slurm task = one concept + one seed.
+  concepts:
+    - key: snoopy
+      text: Snoopy
+
+    - key: mickey
+      text: Mickey
+
+    - key: spongebob
+      text: SpongeBob
+
+    - key: pikachu
+      text: Pikachu
+
+    - key: dog
+      text: dog
+
+    - key: legislator
+      text: legislator
+
+
+experiment:
+  output_dir: ${run_dir}/benchmark
+
+  resume:
+    mode: resume
+    verify_images: true
+    repair_incomplete: true
+
+  strengths:
+    - ${shift.dit_gamma}
+
+  schedules:
+    - name: full_shift
+
+      blocks: ${shift.blocks}
+      steps: ${shift.steps}
+
+      strengths:
+        - ${shift.dit_gamma}
+
+      use_classifier: true
+
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: raw
+
+  # Filled dynamically by snoopy_benchmark.py.
+  cases: []
+
+
+hydra:
+  run:
+    dir: ${benchmark.output_root}/task_${benchmark.task_id}
+
+  job:
+    chdir: false
+
+  output_subdir: .hydra

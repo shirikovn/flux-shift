@@ -1,0 +1,82 @@
+_target_: src.datasets.prompt_pairs.PromptPairDataset
+
+pairs:
+  - name: field
+    negative_prompt: "the field"
+    positive_prompt: "the field Snoopy"
+
+  - name: blue_background
+    negative_prompt: "blue background"
+    positive_prompt: "blue background Snoopy"
+
+  - name: balloon
+    negative_prompt: "balloon"
+    positive_prompt: "balloon Snoopy"
+
+  - name: green_background
+    negative_prompt: "green background"
+    positive_prompt: "green background Snoopy"
+
+  - name: girl
+    negative_prompt: "girl"
+    positive_prompt: "girl Snoopy"
+
+  - name: sports_car
+    negative_prompt: "sports car"
+    positive_prompt: "sports car Snoopy"
+
+  - name: king_crab
+    negative_prompt: "king crab"
+    positive_prompt: "king crab Snoopy"
+
+  - name: white_background
+    negative_prompt: "white background"
+    positive_prompt: "white background Snoopy"
+
+  - name: bald_eagle
+    negative_prompt: "bald eagle"
+    positive_prompt: "bald eagle Snoopy"
+
+  - name: bench
+    negative_prompt: "bench"
+    positive_prompt: "bench Snoopy"
+
+  - name: black_background
+    negative_prompt: "black background"
+    positive_prompt: "black background Snoopy"
+
+  - name: river
+    negative_prompt: "river"
+    positive_prompt: "river Snoopy"
+
+  - name: park
+    negative_prompt: "park"
+    positive_prompt: "park Snoopy"
+
+  - name: lake
+    negative_prompt: "lake"
+    positive_prompt: "lake Snoopy"
+
+  - name: house
+    negative_prompt: "house"
+    positive_prompt: "house Snoopy"
+
+  - name: yellow_background
+    negative_prompt: "yellow background"
+    positive_prompt: "yellow background Snoopy"
+
+  - name: car
+    negative_prompt: "car"
+    positive_prompt: "car Snoopy"
+
+  - name: ball
+    negative_prompt: "ball"
+    positive_prompt: "ball Snoopy"
+
+  - name: toy
+    negative_prompt: "toy"
+    positive_prompt: "toy Snoopy"
+
+  - name: near_tree
+    negative_prompt: "near tree"
+    positive_prompt: "near tree Snoopy"
