@@ -19,6 +19,12 @@ The repository provides four main scripts:
 
 Install the project dependencies:
 
+> First do:
+
+```bash
+python -m pip install --upgrade pip setuptools wheel
+```
+
 ```bash
 pip install -r requirements.txt
 ```

@@ -1,79 +1,113 @@
 #!/bin/bash
 
+#SBATCH --partition=rocky
+#SBATCH --constraint="[type_a|type_b|type_c]"
+
 #SBATCH --job-name=shift-snoopy-artifacts
+#SBATCH --account=proj_1892
+
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --gres=gpu:1
+
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --time=04:00:00
-#SBATCH --output=logs/%x-%j.out
-#SBATCH --error=logs/%x-%j.err
+#SBATCH --mem=96G
+#SBATCH --time=06:00:00
+
+#SBATCH --output=/home/nashirikov/shift-flux-project/logs/%x-%j.out
+#SBATCH --error=/home/nashirikov/shift-flux-project/logs/%x-%j.err
 
 set -euo pipefail
 
-cd "${SLURM_SUBMIT_DIR}"
 
-# ---------------------------------------------------------
-# Activate your environment here.
-# Example:
-#
-# source .venv/bin/activate
-#
-# or:
-#
-# source ~/miniconda3/etc/profile.d/conda.sh
-# conda activate flux-shift
-# ---------------------------------------------------------
+PROJECT_DIR=/home/nashirikov/shift-flux-project
 
+export HF_HOME=/home/nashirikov/huggingface
+export HF_HUB_OFFLINE=1
+export PYTHONUNBUFFERED=1
+export TOKENIZERS_PARALLELISM=false
+
+
+cd "$PROJECT_DIR"
+
+module load python/miniconda
+source "/home/nashirikov/.venv/bin/activate"
+
+
+echo "============================================================"
+echo "SNOOPY ARTIFACT CONSTRUCTION"
+echo "============================================================"
+
+echo "Date: $(date)"
 echo "Host: $(hostname)"
-echo "Job: ${SLURM_JOB_ID}"
-echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
+echo "Job: ${SLURM_JOB_ID:-not-set}"
 
 nvidia-smi
 
 
-echo
-echo "========================================"
-echo "1/3 Collecting Snoopy DiT activations"
-echo "========================================"
+python - <<'PY'
+import torch
 
-python collect_activations.py \
+print("GPU:", torch.cuda.get_device_name(0))
+print(
+    "VRAM:",
+    round(
+        torch.cuda.get_device_properties(0).total_memory
+        / 1024**3,
+        2,
+    ),
+    "GiB",
+)
+PY
+
+
+echo
+echo "============================================================"
+echo "1/3 COLLECT DIT ACTIVATIONS"
+echo "============================================================"
+
+time python collect_activations.py \
     dataset=snoopy_20 \
-    model=flux_schnell_cluster \
+    model=flux_schnell_v100 \
     generation=schnell_1024 \
     hydra.run.dir=artifacts/snoopy/dit
 
 
 echo
-echo "========================================"
-echo "2/3 Training block/step SVM classifiers"
-echo "========================================"
+echo "============================================================"
+echo "2/3 TRAIN SVM CLASSIFIERS"
+echo "============================================================"
 
-python train_svm.py \
+time python train_svm.py \
     trainer.dataset_dir=artifacts/snoopy/dit/svm_dataset \
     hydra.run.dir=artifacts/snoopy/svm_training
 
 
 echo
-echo "========================================"
-echo "3/3 Collecting pooled CLIP vector"
-echo "========================================"
+echo "============================================================"
+echo "3/3 COLLECT POOLED VECTOR"
+echo "============================================================"
 
-python collect_pooled_vector.py \
+time python collect_pooled_vector.py \
     dataset=snoopy_20 \
-    model=flux_schnell_cluster \
+    model=flux_schnell_v100 \
     generation=schnell_1024 \
     target_prompt=Snoopy \
     hydra.run.dir=artifacts/snoopy/pooled
 
 
 echo
-echo "========================================"
-echo "Artifacts completed"
-echo "========================================"
+echo "============================================================"
+echo "ARTIFACTS"
+echo "============================================================"
 
 find artifacts/snoopy \
-    -maxdepth 4 \
+    -maxdepth 5 \
     -type f \
     | sort
+
+
+echo
+echo "============================================================"
+echo "DONE"
+echo "============================================================"

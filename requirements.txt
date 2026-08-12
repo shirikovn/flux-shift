@@ -1,8 +1,33 @@
+--extra-index-url https://download.pytorch.org/whl/cu126
+
+# ---------------------------------------------------------
+# PyTorch stack
+# Tesla V100 = Volta / sm_70, so keep CUDA 12.6.
+# ---------------------------------------------------------
+
+torch==2.9.0+cu126
+torchvision==0.24.0+cu126
+
+
+# ---------------------------------------------------------
+# flux-shift project dependencies
+# ---------------------------------------------------------
+
 diffusers==0.39.0
 hydra-core==1.3.4
 joblib==1.5.3
 numpy==2.5.1
 omegaconf==2.3.0
 Pillow==12.3.0
-scikit_learn==1.9.0
-torch==2.9.0
+scikit-learn==1.9.0
+
+
+# ---------------------------------------------------------
+# FLUX / Diffusers runtime
+# ---------------------------------------------------------
+
+accelerate==1.14.0
+transformers>=4.41.2,<6
+huggingface-hub<2
+safetensors
+sentencepiece

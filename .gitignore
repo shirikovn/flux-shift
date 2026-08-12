@@ -15,3 +15,5 @@ __pycache__/
 
 # System
 .DS_Store
+
+logs/

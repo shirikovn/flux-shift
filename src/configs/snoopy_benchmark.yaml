@@ -1,43 +1,55 @@
 defaults:
-  - model: flux_schnell_cluster
+  - model: flux_schnell_v100
   - generation: schnell_1024
   - intervention: steer_full_shift
   - pipeline: steering_experiment
   - _self_
 
-# Replaced by snoopy_benchmark.py according to task_id.
+
+# Filled according to benchmark.task_id.
 seed: 0
+
 device: cuda
 
 run_dir: ${hydra:runtime.output_dir}
 
+
+# =========================================================
+# SHIFT K=1 reproduction configuration
+# =========================================================
+
 shift:
   artifacts_root: artifacts/snoopy
 
-  # Table 6 calls this "diff sep":
-  # token-wise difference.
+  # Table-6 "diff sep":
+  # token-wise mean difference.
   vector_type: tokenwise_difference
 
-  # One step-0 vector reused at every runtime timestep.
+  # One step-0 vector reused for every runtime step.
   vector_timing:
     mode: shared
     source_step: 0
+
     steps:
       - 0
       - 1
       - 2
       - 3
 
-  # Classifier evaluates the current timestep.
+  # The current activation at each step is classified
+  # using the corresponding per-step SVM.
   classifier_timing:
     mode: per_step
     source_step: 0
+
     steps:
       - 0
       - 1
       - 2
       - 3
 
+
+  # Artifacts exist for every FLUX double-stream block.
   artifact_blocks:
     - 0
     - 1
@@ -59,8 +71,8 @@ shift:
     - 17
     - 18
 
-  # Reproduction hypothesis for Table 3:
-  # steer every FLUX double-stream block.
+
+  # Steer every double-stream block.
   blocks:
     - 0
     - 1
@@ -82,35 +94,41 @@ shift:
     - 17
     - 18
 
+
   steps:
     - 0
     - 1
     - 2
     - 3
 
+
   dit_gamma: 500.0
   pooled_gamma: 6.0
 
-  # Keep the value already used by your implementation.
-  # The paper defines eta_max but does not numerically specify
-  # it in the method description.
+  # Keep the value already used by our implementation.
   eta_max: 4.0
 
 
+# =========================================================
+# Benchmark
+# =========================================================
+
 benchmark:
-  # Slurm sets this automatically.
-  # Outside Slurm it defaults to task 0.
+
+  # Set automatically by Slurm.
   task_id: ${oc.env:SLURM_ARRAY_TASK_ID,0}
 
-  output_root: outputs/snoopy_table3
+  # Can be changed without editing YAML:
+  #
+  # export SNOOPY_NUM_TEMPLATES=4
+  #
+  # for a smoke test.
+  num_templates: ${oc.env:SNOOPY_NUM_TEMPLATES,80}
 
-  # Useful for a tiny smoke test:
-  # python snoopy_benchmark.py benchmark.num_templates=4
-  num_templates: 80
+  output_root: ${oc.env:SNOOPY_OUTPUT_ROOT,outputs/snoopy_table3}
 
-  # Paper says nine seeds but doesn't enumerate them.
-  # These are the nine values in the authors' released
-  # FID evaluation code.
+
+  # Nine seeds used in the authors' released evaluation.
   seeds:
     - 10
     - 20
@@ -122,7 +140,7 @@ benchmark:
     - 80
     - 90
 
-  # One Slurm task = one concept + one seed.
+
   concepts:
     - key: snoopy
       text: Snoopy
@@ -143,18 +161,33 @@ benchmark:
       text: legislator
 
 
+# =========================================================
+# Generation experiment
+# =========================================================
+
 experiment:
+
   output_dir: ${run_dir}/benchmark
+
 
   resume:
     mode: resume
     verify_images: true
     repair_incomplete: true
 
+
   strengths:
     - ${shift.dit_gamma}
 
+
+  # IMPORTANT:
+  # only the final SHIFT schedule.
+  #
+  # Do NOT add dit_only here for the Table-3 run,
+  # otherwise we generate an unnecessary third image
+  # for every prompt.
   schedules:
+
     - name: full_shift
 
       blocks: ${shift.blocks}
@@ -166,16 +199,23 @@ experiment:
       use_classifier: true
 
       use_pooled: true
+
       pooled_strength: ${shift.pooled_gamma}
+
+      # "raw" in our controller still computes cosine
+      # similarity; raw means it does not clamp/abs it.
       pooled_similarity_mode: raw
 
-  # Filled dynamically by snoopy_benchmark.py.
+
+  # Filled by snoopy_benchmark.py.
   cases: []
 
 
 hydra:
+
   run:
-    dir: ${benchmark.output_root}/task_${benchmark.task_id}
+    dir: >-
+      ${benchmark.output_root}/task_${benchmark.task_id}
 
   job:
     chdir: false
