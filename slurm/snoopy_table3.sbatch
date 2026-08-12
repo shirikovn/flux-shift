@@ -11,28 +11,22 @@
 #SBATCH --gres=gpu:1
 
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=64G
 
-#SBATCH --time=04:00:00
+# Set this according to your cluster's permitted
+# maximum walltime.
+#SBATCH --time=24:00:00
 
-# 6 concepts * 9 seeds = 54 tasks.
-#
-# Start conservatively with at most 4 GPUs
-# running simultaneously.
-#SBATCH --array=0-53%4
+# Exactly four persistent GPU workers.
+#SBATCH --array=0-3
 
-#SBATCH --output=/home/nashirikov/shift-flux-project/logs/%x-%A_%a.out
-#SBATCH --error=/home/nashirikov/shift-flux-project/logs/%x-%A_%a.err
+#SBATCH --output=/home/nashirikov/flux-shift/logs/%x-%A_%a.out
+#SBATCH --error=/home/nashirikov/flux-shift/logs/%x-%A_%a.err
 
 
 set -euo pipefail
 
 
-# =========================================================
-# Paths / environment
-# =========================================================
-
-PROJECT_DIR=/home/nashirikov/shift-flux-project
+PROJECT_DIR=/home/nashirikov/flux-shift
 
 
 export HF_HOME=/home/nashirikov/huggingface
@@ -40,6 +34,8 @@ export HF_HUB_OFFLINE=1
 
 export PYTHONUNBUFFERED=1
 export TOKENIZERS_PARALLELISM=false
+
+export SNOOPY_NUM_WORKERS=4
 
 
 cd "$PROJECT_DIR"
@@ -50,124 +46,28 @@ module load python/miniconda
 source "/home/nashirikov/.venv/bin/activate"
 
 
-mkdir -p \
-    /home/nashirikov/shift-flux-project/logs
+mkdir -p logs
 
-
-# =========================================================
-# Job information
-# =========================================================
 
 echo "============================================================"
-echo "SNOOPY TABLE 3"
+echo "SNOOPY TABLE 3 WORKER"
 echo "============================================================"
 
-echo "Date:             $(date)"
-echo "Host:             $(hostname)"
-echo "Job ID:           ${SLURM_JOB_ID:-not-set}"
-echo "Array job ID:     ${SLURM_ARRAY_JOB_ID:-not-set}"
-echo "Array task ID:    ${SLURM_ARRAY_TASK_ID:-not-set}"
-echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-not-set}"
-echo "Working dir:      $(pwd)"
-echo "HF_HOME:          ${HF_HOME}"
-echo "HF_HUB_OFFLINE:   ${HF_HUB_OFFLINE}"
+echo "Date:       $(date)"
+echo "Host:       $(hostname)"
+echo "Job ID:     ${SLURM_JOB_ID}"
+echo "Worker ID:  ${SLURM_ARRAY_TASK_ID}"
+echo "Workers:    ${SNOOPY_NUM_WORKERS}"
 
 echo
 
-
-# =========================================================
-# Decode task ID for readable logs
-# =========================================================
-
-SEEDS=(
-    10
-    20
-    30
-    42
-    50
-    60
-    70
-    80
-    90
-)
-
-CONCEPTS=(
-    snoopy
-    mickey
-    spongebob
-    pikachu
-    dog
-    legislator
-)
-
-
-TASK_ID="${SLURM_ARRAY_TASK_ID}"
-
-NUM_SEEDS="${#SEEDS[@]}"
-
-CONCEPT_INDEX=$(( TASK_ID / NUM_SEEDS ))
-SEED_INDEX=$(( TASK_ID % NUM_SEEDS ))
-
-CONCEPT="${CONCEPTS[$CONCEPT_INDEX]}"
-SEED="${SEEDS[$SEED_INDEX]}"
-
-
-echo "Benchmark task:"
-echo "  task:    ${TASK_ID}"
-echo "  concept: ${CONCEPT}"
-echo "  seed:    ${SEED}"
-
-echo
-
-
-# =========================================================
-# GPU check
-# =========================================================
 
 nvidia-smi
 
-echo
-
-
-python - <<'PY'
-import torch
-
-assert torch.cuda.is_available(), (
-    "CUDA is unavailable"
-)
-
-props = torch.cuda.get_device_properties(0)
-
-print("PyTorch:", torch.__version__)
-print("GPU:", props.name)
-print(
-    "VRAM:",
-    round(
-        props.total_memory / 1024**3,
-        2,
-    ),
-    "GiB",
-)
-print(
-    "Compute capability:",
-    torch.cuda.get_device_capability(0),
-)
-print(
-    "Native BF16:",
-    torch.cuda.is_bf16_supported(
-        including_emulation=False
-    ),
-)
-PY
-
-
-# =========================================================
-# Artifact preflight
-# =========================================================
 
 echo
 echo "============================================================"
-echo "CHECKING SNOOPY ARTIFACTS"
+echo "CHECKING ARTIFACTS"
 echo "============================================================"
 
 
@@ -189,20 +89,12 @@ CLASSIFIER_COUNT=$(
 )
 
 
-echo "Shared step-0 token vectors: ${VECTOR_COUNT}"
-echo "Per-step SVM classifiers:    ${CLASSIFIER_COUNT}"
+echo "Vectors:     ${VECTOR_COUNT}"
+echo "Classifiers: ${CLASSIFIER_COUNT}"
 
 
-if [[ "${VECTOR_COUNT}" -ne 19 ]]; then
-    echo "ERROR: expected 19 step-0 vectors"
-    exit 1
-fi
-
-
-if [[ "${CLASSIFIER_COUNT}" -ne 76 ]]; then
-    echo "ERROR: expected 76 classifiers"
-    exit 1
-fi
+[[ "${VECTOR_COUNT}" -eq 19 ]]
+[[ "${CLASSIFIER_COUNT}" -eq 76 ]]
 
 
 test -f \
@@ -213,152 +105,34 @@ test -f \
     artifacts/snoopy/pooled/pooled/target_embedding.pt
 
 
-echo "Pooled artifacts: OK"
+echo "Artifacts OK"
 
-
-# =========================================================
-# Optional model-cache sanity check
-# =========================================================
-
-python - <<'PY'
-from huggingface_hub import snapshot_download
-
-path = snapshot_download(
-    repo_id=(
-        "black-forest-labs/"
-        "FLUX.1-schnell"
-    ),
-    revision=(
-        "741f7c3ce8b383c54771c7003378a50191e9efe9"
-    ),
-    local_files_only=True,
-)
-
-print("Offline FLUX snapshot:")
-print(path)
-PY
-
-
-# =========================================================
-# GPU monitor
-# =========================================================
-
-GPU_MONITOR_FILE="/home/nashirikov/shift-flux-project/logs/gpu-${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}.csv"
-
-
-nvidia-smi \
-    --query-gpu=timestamp,memory.used,utilization.gpu,power.draw \
-    --format=csv \
-    -l 5 \
-    > "${GPU_MONITOR_FILE}" &
-
-
-NVIDIA_SMI_PID=$!
-
-
-cleanup_monitor()
-{
-    kill "${NVIDIA_SMI_PID}" \
-        2>/dev/null || true
-
-    wait "${NVIDIA_SMI_PID}" \
-        2>/dev/null || true
-}
-
-
-trap cleanup_monitor EXIT
-
-
-# =========================================================
-# Run
-# =========================================================
 
 echo
 echo "============================================================"
-echo "STARTING GENERATION"
+echo "STARTING WORKER"
 echo "============================================================"
+
+
+START_TIME=$(date +%s)
+
 
 time python snoopy_benchmark.py
 
-# =========================================================
-# Stop monitoring cleanly
-# =========================================================
 
-cleanup_monitor
+END_TIME=$(date +%s)
 
-trap - EXIT
-
-
-# =========================================================
-# Validate task outputs
-# =========================================================
-
-echo
-echo "============================================================"
-echo "VALIDATING OUTPUT"
-echo "============================================================"
-
-
-NUM_TEMPLATES="${SNOOPY_NUM_TEMPLATES:-80}"
-
-EXPECTED_RUNS=$(( NUM_TEMPLATES * 2 ))
-
-TASK_OUTPUT="outputs/snoopy_table3/task_${SLURM_ARRAY_TASK_ID}/benchmark"
-
-IMAGE_COUNT=0
-RECORD_COUNT=0
-
-
-if [[ -d "${TASK_OUTPUT}/images" ]]; then
-
-    IMAGE_COUNT=$(
-        find \
-            "${TASK_OUTPUT}/images" \
-            -type f \
-            -name '*.png' \
-            | wc -l
-    )
-
-fi
-
-
-if [[ -d "${TASK_OUTPUT}/records" ]]; then
-
-    RECORD_COUNT=$(
-        find \
-            "${TASK_OUTPUT}/records" \
-            -type f \
-            -name '*.yaml' \
-            | wc -l
-    )
-
-fi
-
-
-echo "Expected runs: ${EXPECTED_RUNS}"
-echo "Images:        ${IMAGE_COUNT}"
-echo "Records:       ${RECORD_COUNT}"
-
-
-if [[ "${IMAGE_COUNT}" -ne "${EXPECTED_RUNS}" ]]; then
-    echo "ERROR: unexpected number of images"
-    exit 1
-fi
-
-
-if [[ "${RECORD_COUNT}" -ne "${EXPECTED_RUNS}" ]]; then
-    echo "ERROR: unexpected number of records"
-    exit 1
-fi
+ELAPSED=$((END_TIME - START_TIME))
 
 
 echo
 echo "============================================================"
-echo "TASK COMPLETED SUCCESSFULLY"
+echo "WORKER FINISHED"
 echo "============================================================"
 
-echo "Task:    ${TASK_ID}"
-echo "Concept: ${CONCEPT}"
-echo "Seed:    ${SEED}"
-echo "Images:  ${IMAGE_COUNT}"
-echo "GPU log: ${GPU_MONITOR_FILE}"
+echo "Worker ID: ${SLURM_ARRAY_TASK_ID}"
+
+printf "Elapsed: %02d:%02d:%02d\n" \
+    $((ELAPSED / 3600)) \
+    $(((ELAPSED % 3600) / 60)) \
+    $((ELAPSED % 60))
