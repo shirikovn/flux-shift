@@ -11,16 +11,15 @@
 #SBATCH --gres=gpu:1
 
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=96G
 #SBATCH --time=06:00:00
 
-#SBATCH --output=/home/nashirikov/shift-flux-project/logs/%x-%j.out
-#SBATCH --error=/home/nashirikov/shift-flux-project/logs/%x-%j.err
+#SBATCH --output=/home/nashirikov/flux-shift/logs/%x-%j.out
+#SBATCH --error=/home/nashirikov/flux-shift/logs/%x-%j.err
 
 set -euo pipefail
 
 
-PROJECT_DIR=/home/nashirikov/shift-flux-project
+PROJECT_DIR=/home/nashirikov/flux-shift
 
 export HF_HOME=/home/nashirikov/huggingface
 export HF_HUB_OFFLINE=1
