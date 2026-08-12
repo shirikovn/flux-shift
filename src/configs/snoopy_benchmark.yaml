@@ -117,18 +117,13 @@ benchmark:
   worker_id: ${oc.env:SLURM_ARRAY_TASK_ID,0}
   num_workers: ${oc.env:SNOOPY_NUM_WORKERS,1}
 
-  num_templates: ${oc.env:SNOOPY_NUM_TEMPLATES,80}
-  output_root: ${oc.env:SNOOPY_OUTPUT_ROOT,outputs/snoopy_table3}
-
   # Can be changed without editing YAML:
   #
   # export SNOOPY_NUM_TEMPLATES=4
   #
   # for a smoke test.
   num_templates: ${oc.env:SNOOPY_NUM_TEMPLATES,80}
-
   output_root: ${oc.env:SNOOPY_OUTPUT_ROOT,outputs/snoopy_table3}
-
 
   # Nine seeds used in the authors' released evaluation.
   seeds:
