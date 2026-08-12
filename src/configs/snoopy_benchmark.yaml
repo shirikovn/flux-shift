@@ -102,11 +102,11 @@ shift:
     - 3
 
 
-  dit_gamma: 0
-  pooled_gamma: 6
+  dit_gamma: 250
+  pooled_gamma: 1.5
 
   # Keep the value already used by our implementation.
-  eta_max: 0.05
+  eta_max: 4
 
 
 # =========================================================
