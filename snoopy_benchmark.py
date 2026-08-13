@@ -27,7 +27,6 @@ from src.utils.run_manifest import (
     RunManifest,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -37,20 +36,13 @@ def get_worker_task_ids(
     total_tasks: int,
 ) -> list[int]:
     if num_workers < 1:
-        raise ValueError(
-            "num_workers must be >= 1"
-        )
+        raise ValueError("num_workers must be >= 1")
 
     if worker_id < 0:
-        raise ValueError(
-            "worker_id must be >= 0"
-        )
+        raise ValueError("worker_id must be >= 0")
 
     if worker_id >= num_workers:
-        raise ValueError(
-            f"worker_id={worker_id} must be "
-            f"< num_workers={num_workers}"
-        )
+        raise ValueError(f"worker_id={worker_id} must be " f"< num_workers={num_workers}")
 
     return list(
         range(
@@ -81,46 +73,23 @@ def main(config: DictConfig) -> None:
         benchmark_config,
         dict,
     ):
-        raise TypeError(
-            "benchmark config must resolve "
-            "to a mapping"
-        )
+        raise TypeError("benchmark config must resolve " "to a mapping")
 
+    concepts = [dict(item) for item in benchmark_config["concepts"]]
 
-    concepts = [
-        dict(item)
-        for item
-        in benchmark_config["concepts"]
-    ]
+    seeds = [int(seed) for seed in benchmark_config["seeds"]]
 
-    seeds = [
-        int(seed)
-        for seed
-        in benchmark_config["seeds"]
-    ]
+    total_tasks = len(concepts) * len(seeds)
 
+    worker_id = int(benchmark_config["worker_id"])
 
-    total_tasks = (
-        len(concepts)
-        * len(seeds)
-    )
-
-
-    worker_id = int(
-        benchmark_config["worker_id"]
-    )
-
-    num_workers = int(
-        benchmark_config["num_workers"]
-    )
-
+    num_workers = int(benchmark_config["num_workers"])
 
     task_ids = get_worker_task_ids(
         worker_id=worker_id,
         num_workers=num_workers,
         total_tasks=total_tasks,
     )
-
 
     logger.info(
         "Worker %d/%d",
@@ -138,31 +107,19 @@ def main(config: DictConfig) -> None:
         len(task_ids),
     )
 
-
     # =====================================================
     # CUDA
     # =====================================================
 
-    device = torch.device(
-        str(config.device)
-    )
+    device = torch.device(str(config.device))
 
-    if (
-        device.type == "cuda"
-        and not torch.cuda.is_available()
-    ):
-        raise RuntimeError(
-            "CUDA requested but unavailable"
-        )
-
+    if device.type == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA requested but unavailable")
 
     logger.info(
         "GPU: %s",
-        torch.cuda.get_device_name(0)
-        if torch.cuda.is_available()
-        else "none",
+        torch.cuda.get_device_name(0) if torch.cuda.is_available() else "none",
     )
-
 
     # =====================================================
     # IMPORTANT:
@@ -170,63 +127,34 @@ def main(config: DictConfig) -> None:
     # Load intervention manager and FLUX exactly ONCE.
     # =====================================================
 
-    logger.info(
-        "Creating intervention manager..."
-    )
+    logger.info("Creating intervention manager...")
 
-    intervention_manager = instantiate(
-        config.intervention
-    )
+    intervention_manager = instantiate(config.intervention)
 
-
-    logger.info(
-        "Loading FLUX..."
-    )
+    logger.info("Loading FLUX...")
 
     model = instantiate(
         config.model,
         device=device,
-        intervention_manager=(
-            intervention_manager
-        ),
+        intervention_manager=(intervention_manager),
         _recursive_=False,
     )
 
-
-    logger.info(
-        "Preparing FLUX for inference..."
-    )
+    logger.info("Preparing FLUX for inference...")
 
     model.prepare_for_inference()
 
-
-    logger.info(
-        "FLUX loaded and ready."
-    )
-
+    logger.info("FLUX loaded and ready.")
 
     # =====================================================
     # Process logical experiment tasks
     # =====================================================
 
-    output_root = Path(
-        str(
-            benchmark_config[
-                "output_root"
-            ]
-        )
-    )
+    output_root = Path(str(benchmark_config["output_root"]))
 
-
-    num_templates = int(
-        benchmark_config[
-            "num_templates"
-        ]
-    )
-
+    num_templates = int(benchmark_config["num_templates"])
 
     completed_tasks = []
-
 
     for task_position, task_id in enumerate(
         task_ids,
@@ -239,15 +167,11 @@ def main(config: DictConfig) -> None:
             seeds=seeds,
         )
 
-
         logger.info("")
-        logger.info(
-            "=" * 70
-        )
+        logger.info("=" * 70)
 
         logger.info(
-            "Worker %d: logical task "
-            "%d/%d",
+            "Worker %d: logical task " "%d/%d",
             worker_id,
             task_position,
             len(task_ids),
@@ -260,36 +184,23 @@ def main(config: DictConfig) -> None:
             task.seed,
         )
 
-        logger.info(
-            "=" * 70
-        )
-
+        logger.info("=" * 70)
 
         # -------------------------------------------------
         # Seed
         # -------------------------------------------------
 
-        set_random_seed(
-            task.seed
-        )
-
+        set_random_seed(task.seed)
 
         # -------------------------------------------------
         # 80 prompts
         # -------------------------------------------------
 
         cases = build_cases(
-            concept_key=(
-                task.concept_key
-            ),
-            concept_text=(
-                task.concept_text
-            ),
-            num_templates=(
-                num_templates
-            ),
+            concept_key=(task.concept_key),
+            concept_text=(task.concept_text),
+            num_templates=(num_templates),
         )
-
 
         # -------------------------------------------------
         # Task output directory
@@ -298,34 +209,20 @@ def main(config: DictConfig) -> None:
         # do not have to change.
         # -------------------------------------------------
 
-        task_dir = (
-            output_root
-            / f"task_{task.task_id}"
-        )
+        task_dir = output_root / f"task_{task.task_id}"
 
-
-        experiment_dir = (
-            task_dir
-            / "benchmark"
-        )
-
+        experiment_dir = task_dir / "benchmark"
 
         task_dir.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-
         # -------------------------------------------------
         # Manifest for this logical benchmark task
         # -------------------------------------------------
 
-        run_name = (
-            "snoopy_table3"
-            f"__{task.concept_key}"
-            f"__seed_{task.seed}"
-        )
-
+        run_name = "snoopy_table3" f"__{task.concept_key}" f"__seed_{task.seed}"
 
         # Make a task-specific copy of the Hydra config.
         task_config = OmegaConf.create(
@@ -336,15 +233,10 @@ def main(config: DictConfig) -> None:
         )
 
         task_config.seed = task.seed
-        task_config.experiment.cases = (
-            OmegaConf.create(cases)
-        )
-
+        task_config.experiment.cases = OmegaConf.create(cases)
 
         with RunManifest(
-            output_dir=str(
-                task_dir
-            ),
+            output_dir=str(task_dir),
             run_name=run_name,
             config=task_config,
             device=device,
@@ -355,63 +247,33 @@ def main(config: DictConfig) -> None:
                 asdict(task),
             )
 
-
             # ---------------------------------------------
             # New pipeline, SAME already-loaded model.
             # ---------------------------------------------
 
             pipeline = instantiate(
                 config.pipeline,
-
                 model=model,
-
-                intervention_manager=(
-                    intervention_manager
-                ),
-
+                intervention_manager=(intervention_manager),
                 cases=cases,
-
-                schedules=(
-                    config.experiment.schedules
-                ),
-
-                strengths=(
-                    config.experiment.strengths
-                ),
-
-                generation_config=(
-                    config.generation
-                ),
-
-                output_dir=str(
-                    experiment_dir
-                ),
-
-                resume_config=(
-                    config.experiment.resume
-                ),
-
+                schedules=(config.experiment.schedules),
+                strengths=(config.experiment.strengths),
+                generation_config=(config.generation),
+                output_dir=str(experiment_dir),
+                resume_config=(config.experiment.resume),
                 seed=task.seed,
-
                 logger=logger,
-
                 _recursive_=False,
             )
 
-
             results = pipeline.run()
-
 
             manifest.add_result(
                 "experiment",
                 results,
             )
 
-
-            completed_tasks.append(
-                task.task_id
-            )
-
+            completed_tasks.append(task.task_id)
 
         # -------------------------------------------------
         # Useful after each logical group.
@@ -419,27 +281,18 @@ def main(config: DictConfig) -> None:
 
         if torch.cuda.is_available():
             logger.info(
-                "CUDA allocated after task: "
-                "%.2f GiB",
-                (
-                    torch.cuda.memory_allocated()
-                    / 1024**3
-                ),
+                "CUDA allocated after task: " "%.2f GiB",
+                (torch.cuda.memory_allocated() / 1024**3),
             )
-
 
     # =====================================================
     # Done
     # =====================================================
 
     logger.info("")
-    logger.info(
-        "=" * 70
-    )
+    logger.info("=" * 70)
 
-    logger.info(
-        "WORKER COMPLETED"
-    )
+    logger.info("WORKER COMPLETED")
 
     logger.info(
         "worker_id=%d",
@@ -451,9 +304,7 @@ def main(config: DictConfig) -> None:
         completed_tasks,
     )
 
-    logger.info(
-        "=" * 70
-    )
+    logger.info("=" * 70)
 
 
 if __name__ == "__main__":

@@ -18,14 +18,11 @@ from transformers import (
     CLIPProcessor,
 )
 
-
 CLIP_MODEL_ID = "openai/clip-vit-large-patch14"
 
 EXPECTED_TEMPLATES = 80
 EXPECTED_SEEDS = 9
-EXPECTED_IMAGES_PER_CONCEPT = (
-    EXPECTED_TEMPLATES * EXPECTED_SEEDS
-)
+EXPECTED_IMAGES_PER_CONCEPT = EXPECTED_TEMPLATES * EXPECTED_SEEDS
 
 
 PAPER_RESULTS = {
@@ -91,11 +88,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--device",
         type=str,
-        default=(
-            "cuda"
-            if torch.cuda.is_available()
-            else "cpu"
-        ),
+        default=("cuda" if torch.cuda.is_available() else "cpu"),
     )
 
     parser.add_argument(
@@ -132,9 +125,7 @@ def load_yaml(path: Path) -> dict[str, Any]:
     )
 
     if not isinstance(value, dict):
-        raise TypeError(
-            f"Record is not a mapping: {path}"
-        )
+        raise TypeError(f"Record is not a mapping: {path}")
 
     return value
 
@@ -145,9 +136,7 @@ def concept_from_case_name(
     marker = "__t"
 
     if marker not in case_name:
-        raise ValueError(
-            f"Unexpected benchmark case name: {case_name}"
-        )
+        raise ValueError(f"Unexpected benchmark case name: {case_name}")
 
     return case_name.split(marker, 1)[0]
 
@@ -157,18 +146,12 @@ def load_records(
 ) -> list[ImageRecord]:
     records: list[ImageRecord] = []
 
-    paths = sorted(
-        root.rglob("benchmark/records/*.yaml")
-    )
+    paths = sorted(root.rglob("benchmark/records/*.yaml"))
 
     if not paths:
-        raise FileNotFoundError(
-            f"No benchmark records found below {root}"
-        )
+        raise FileNotFoundError(f"No benchmark records found below {root}")
 
-    seen: set[
-        tuple[str, str, int, str, float]
-    ] = set()
+    seen: set[tuple[str, str, int, str, float]] = set()
 
     for record_path in paths:
         record = load_yaml(record_path)
@@ -177,33 +160,21 @@ def load_records(
             continue
 
         case_name = str(record["case_name"])
-        concept = concept_from_case_name(
-            case_name
-        )
+        concept = concept_from_case_name(case_name)
 
         image_metadata = record.get("image")
 
         if not isinstance(image_metadata, dict):
-            raise RuntimeError(
-                f"Record has no image metadata: "
-                f"{record_path}"
-            )
+            raise RuntimeError(f"Record has no image metadata: " f"{record_path}")
 
-        relative_path = Path(
-            str(image_metadata["relative_path"])
-        )
+        relative_path = Path(str(image_metadata["relative_path"]))
 
         # .../task_X/benchmark/records/foo.yaml
         benchmark_dir = record_path.parent.parent
-        image_path = (
-            benchmark_dir / relative_path
-        )
+        image_path = benchmark_dir / relative_path
 
         if not image_path.is_file():
-            raise FileNotFoundError(
-                f"Missing image referenced by "
-                f"{record_path}: {image_path}"
-            )
+            raise FileNotFoundError(f"Missing image referenced by " f"{record_path}: {image_path}")
 
         item = ImageRecord(
             concept=concept,
@@ -211,9 +182,7 @@ def load_records(
             prompt=str(record["prompt"]),
             seed=int(record["seed"]),
             schedule=str(record["schedule"]),
-            strength=float(
-                record["base_strength"]
-            ),
+            strength=float(record["base_strength"]),
             path=image_path,
         )
 
@@ -226,9 +195,7 @@ def load_records(
         )
 
         if identity in seen:
-            raise RuntimeError(
-                f"Duplicate run encountered: {identity}"
-            )
+            raise RuntimeError(f"Duplicate run encountered: {identity}")
 
         seen.add(identity)
         records.append(item)
@@ -287,20 +254,14 @@ def validate_count(
     if actual == EXPECTED_IMAGES_PER_CONCEPT:
         return
 
-    message = (
-        f"{label}: expected "
-        f"{EXPECTED_IMAGES_PER_CONCEPT} images, "
-        f"found {actual}."
-    )
+    message = f"{label}: expected " f"{EXPECTED_IMAGES_PER_CONCEPT} images, " f"found {actual}."
 
     if allow_incomplete:
         print(f"WARNING: {message}")
         return
 
     raise RuntimeError(
-        message
-        + " Use --allow-incomplete for a partial "
-        + "smoke-test evaluation."
+        message + " Use --allow-incomplete for a partial " + "smoke-test evaluation."
     )
 
 
@@ -318,24 +279,11 @@ class CLIPEvaluator:
         self.device = torch.device(device)
         self.batch_size = int(batch_size)
 
-        print(
-            f"Loading CLIP {CLIP_MODEL_ID} "
-            f"on {self.device}..."
-        )
+        print(f"Loading CLIP {CLIP_MODEL_ID} " f"on {self.device}...")
 
-        self.model = (
-            CLIPModel.from_pretrained(
-                CLIP_MODEL_ID
-            )
-            .to(self.device)
-            .eval()
-        )
+        self.model = CLIPModel.from_pretrained(CLIP_MODEL_ID).to(self.device).eval()
 
-        self.processor = (
-            CLIPProcessor.from_pretrained(
-                CLIP_MODEL_ID
-            )
-        )
+        self.processor = CLIPProcessor.from_pretrained(CLIP_MODEL_ID)
 
     @torch.inference_mode()
     def score(
@@ -343,9 +291,7 @@ class CLIPEvaluator:
         records: list[ImageRecord],
     ) -> float:
         if not records:
-            raise ValueError(
-                "Cannot compute CLIP on empty records."
-            )
+            raise ValueError("Cannot compute CLIP on empty records.")
 
         score_sum = 0.0
         count = 0
@@ -355,19 +301,11 @@ class CLIPEvaluator:
             len(records),
             self.batch_size,
         ):
-            batch = records[
-                start : start + self.batch_size
-            ]
+            batch = records[start : start + self.batch_size]
 
-            images = [
-                load_rgb(record.path)
-                for record in batch
-            ]
+            images = [load_rgb(record.path) for record in batch]
 
-            texts = [
-                record.prompt
-                for record in batch
-            ]
+            texts = [record.prompt for record in batch]
 
             inputs = self.processor(
                 text=texts,
@@ -376,40 +314,26 @@ class CLIPEvaluator:
                 padding=True,
             )
 
-            inputs = {
-                key: value.to(self.device)
-                for key, value in inputs.items()
-            }
+            inputs = {key: value.to(self.device) for key, value in inputs.items()}
 
             outputs = self.model(**inputs)
 
-            image_features = (
-                outputs.image_embeds
-                / outputs.image_embeds.norm(
-                    dim=-1,
-                    keepdim=True,
-                )
+            image_features = outputs.image_embeds / outputs.image_embeds.norm(
+                dim=-1,
+                keepdim=True,
             )
 
-            text_features = (
-                outputs.text_embeds
-                / outputs.text_embeds.norm(
-                    dim=-1,
-                    keepdim=True,
-                )
+            text_features = outputs.text_embeds / outputs.text_embeds.norm(
+                dim=-1,
+                keepdim=True,
             )
 
-            similarities = (
-                image_features
-                * text_features
-            ).sum(dim=-1)
+            similarities = (image_features * text_features).sum(dim=-1)
 
             # Authors report cosine similarity * 100.
             similarities = similarities * 100.0
 
-            score_sum += float(
-                similarities.sum().item()
-            )
+            score_sum += float(similarities.sum().item())
             count += len(batch)
 
             for image in images:
@@ -428,10 +352,7 @@ def link_images(
     )
 
     for index, record in enumerate(records):
-        target = (
-            destination
-            / f"{index:05d}.png"
-        )
+        target = destination / f"{index:05d}.png"
 
         source = record.path.resolve()
 
@@ -465,16 +386,10 @@ def compute_fid(
         prefix="fid_",
         dir=temp_parent,
     ) as temporary_directory:
-        temporary_root = Path(
-            temporary_directory
-        )
+        temporary_root = Path(temporary_directory)
 
-        baseline_dir = (
-            temporary_root / "baseline"
-        )
-        shifted_dir = (
-            temporary_root / "shifted"
-        )
+        baseline_dir = temporary_root / "baseline"
+        shifted_dir = temporary_root / "shifted"
 
         link_images(
             baseline,
@@ -506,9 +421,7 @@ def main() -> None:
 
     records = load_records(args.root)
 
-    baseline_by_concept, shifted_groups = (
-        group_records(records)
-    )
+    baseline_by_concept, shifted_groups = group_records(records)
 
     concepts = list(PAPER_RESULTS)
 
@@ -525,9 +438,7 @@ def main() -> None:
         )
 
     if not shifted_groups:
-        raise RuntimeError(
-            "No full_shift records were found."
-        )
+        raise RuntimeError("No full_shift records were found.")
 
     for (
         concept,
@@ -549,38 +460,25 @@ def main() -> None:
     print("\nComputing baseline CLIP...")
 
     for concept in concepts:
-        records_for_concept = (
-            baseline_by_concept.get(
-                concept,
-                [],
-            )
+        records_for_concept = baseline_by_concept.get(
+            concept,
+            [],
         )
 
         if not records_for_concept:
             continue
 
-        baseline_clip[concept] = (
-            clip_evaluator.score(
-                records_for_concept
-            )
-        )
+        baseline_clip[concept] = clip_evaluator.score(records_for_concept)
 
-        print(
-            f"  {concept:12s}: "
-            f"{baseline_clip[concept]:.2f}"
-        )
+        print(f"  {concept:12s}: " f"{baseline_clip[concept]:.2f}")
 
-    result_rows: list[
-        dict[str, Any]
-    ] = []
+    result_rows: list[dict[str, Any]] = []
 
     for (
         concept,
         strength,
     ) in sorted(shifted_groups):
-        shifted = shifted_groups[
-            (concept, strength)
-        ]
+        shifted = shifted_groups[(concept, strength)]
 
         baseline = baseline_by_concept.get(
             concept,
@@ -590,14 +488,9 @@ def main() -> None:
         if not baseline:
             continue
 
-        print(
-            f"\nEvaluating "
-            f"{concept}, strength={strength:g}"
-        )
+        print(f"\nEvaluating " f"{concept}, strength={strength:g}")
 
-        shift_clip = clip_evaluator.score(
-            shifted
-        )
+        shift_clip = clip_evaluator.score(shifted)
 
         if args.skip_fid:
             fid_score = float("nan")
@@ -618,45 +511,24 @@ def main() -> None:
                 "strength": strength,
                 "n_baseline": len(baseline),
                 "n_shift": len(shifted),
-                "base_clip": baseline_clip[
-                    concept
-                ],
+                "base_clip": baseline_clip[concept],
                 "shift_clip": shift_clip,
                 "fid": fid_score,
-                "paper_base_clip": (
-                    paper["base_clip"]
-                ),
-                "paper_shift_clip": (
-                    paper["shift_clip"]
-                ),
-                "paper_fid": (
-                    paper["shift_fid"]
-                ),
-                "delta_base_clip": (
-                    baseline_clip[concept]
-                    - paper["base_clip"]
-                ),
-                "delta_shift_clip": (
-                    shift_clip
-                    - paper["shift_clip"]
-                ),
+                "paper_base_clip": (paper["base_clip"]),
+                "paper_shift_clip": (paper["shift_clip"]),
+                "paper_fid": (paper["shift_fid"]),
+                "delta_base_clip": (baseline_clip[concept] - paper["base_clip"]),
+                "delta_shift_clip": (shift_clip - paper["shift_clip"]),
                 "delta_fid": (
-                    fid_score
-                    - paper["shift_fid"]
-                    if not args.skip_fid
-                    else float("nan")
+                    fid_score - paper["shift_fid"] if not args.skip_fid else float("nan")
                 ),
             }
         )
 
-    output_path = (
-        args.output_dir / "summary.csv"
-    )
+    output_path = args.output_dir / "summary.csv"
 
     if not result_rows:
-        raise RuntimeError(
-            "No evaluation rows were produced."
-        )
+        raise RuntimeError("No evaluation rows were produced.")
 
     with output_path.open(
         "w",
@@ -665,9 +537,7 @@ def main() -> None:
     ) as file:
         writer = csv.DictWriter(
             file,
-            fieldnames=list(
-                result_rows[0].keys()
-            ),
+            fieldnames=list(result_rows[0].keys()),
         )
 
         writer.writeheader()
@@ -689,11 +559,7 @@ def main() -> None:
     print("-" * 100)
 
     for row in result_rows:
-        fid_text = (
-            "-"
-            if args.skip_fid
-            else f"{row['fid']:.2f}"
-        )
+        fid_text = "-" if args.skip_fid else f"{row['fid']:.2f}"
 
         print(
             f"{row['concept']:12s} "

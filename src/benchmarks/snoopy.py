@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-
 TEMPLATES: tuple[str, ...] = (
     "a bad photo of a",
     "a photo of many",
@@ -104,22 +103,15 @@ def resolve_task(
     seeds: list[int],
 ) -> BenchmarkTask:
     if not concepts:
-        raise ValueError(
-            "Benchmark concept list is empty."
-        )
+        raise ValueError("Benchmark concept list is empty.")
 
     if not seeds:
-        raise ValueError(
-            "Benchmark seed list is empty."
-        )
+        raise ValueError("Benchmark seed list is empty.")
 
     total_tasks = len(concepts) * len(seeds)
 
     if task_id < 0 or task_id >= total_tasks:
-        raise ValueError(
-            f"task_id={task_id} is outside "
-            f"[0, {total_tasks - 1}]"
-        )
+        raise ValueError(f"task_id={task_id} is outside " f"[0, {total_tasks - 1}]")
 
     concept_index = task_id // len(seeds)
     seed_index = task_id % len(seeds)
@@ -142,32 +134,19 @@ def build_cases(
     num_templates: int = 80,
 ) -> list[dict[str, Any]]:
     if num_templates < 1:
-        raise ValueError(
-            "num_templates must be >= 1."
-        )
+        raise ValueError("num_templates must be >= 1.")
 
     if num_templates > len(TEMPLATES):
-        raise ValueError(
-            f"num_templates must be <= "
-            f"{len(TEMPLATES)}, got "
-            f"{num_templates}."
-        )
+        raise ValueError(f"num_templates must be <= " f"{len(TEMPLATES)}, got " f"{num_templates}.")
 
     cases: list[dict[str, Any]] = []
 
-    for template_index, template in enumerate(
-        TEMPLATES[:num_templates]
-    ):
+    for template_index, template in enumerate(TEMPLATES[:num_templates]):
         cases.append(
             {
-                "name": (
-                    f"{concept_key}"
-                    f"__t{template_index:03d}"
-                ),
+                "name": (f"{concept_key}" f"__t{template_index:03d}"),
                 "operation": "erase",
-                "prompt": (
-                    f"{template} {concept_text}"
-                ),
+                "prompt": (f"{template} {concept_text}"),
             }
         )
 

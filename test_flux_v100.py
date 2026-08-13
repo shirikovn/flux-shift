@@ -5,15 +5,12 @@ import time
 import torch
 from diffusers import FluxPipeline
 
-
 REPO_ID = "black-forest-labs/FLUX.1-schnell"
-REVISION = (
-    "741f7c3ce8b383c54771c7003378a50191e9efe9"
-)
+REVISION = "741f7c3ce8b383c54771c7003378a50191e9efe9"
 
 
 def gib(value: int) -> float:
-    return value / (1024 ** 3)
+    return value / (1024**3)
 
 
 def main() -> None:
@@ -23,9 +20,7 @@ def main() -> None:
 
     print(
         "Native BF16:",
-        torch.cuda.is_bf16_supported(
-            including_emulation=False
-        ),
+        torch.cuda.is_bf16_supported(including_emulation=False),
     )
 
     print("Loading FLUX...")
@@ -52,9 +47,7 @@ def main() -> None:
 
     torch.cuda.reset_peak_memory_stats()
 
-    generator = torch.Generator(
-        device="cpu"
-    ).manual_seed(42)
+    generator = torch.Generator(device="cpu").manual_seed(42)
 
     print("Starting generation...")
 
@@ -74,9 +67,7 @@ def main() -> None:
 
     elapsed = time.perf_counter() - start
 
-    image.save(
-        "outputs/v100_flux_smoke.png"
-    )
+    image.save("outputs/v100_flux_smoke.png")
 
     print()
     print("Generation completed.")

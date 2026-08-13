@@ -3,35 +3,35 @@ _target_: src.datasets.prompt_pairs.PromptPairDataset
 pairs:
   - name: field
     negative_prompt: "the field"
-    positive_prompt: "the field Snoopy"
+    positive_prompt: "the field with Snoopy"
 
   - name: blue_background
     negative_prompt: "blue background"
-    positive_prompt: "blue background Snoopy"
+    positive_prompt: "blue background with Snoopy"
 
   - name: balloon
     negative_prompt: "balloon"
-    positive_prompt: "balloon Snoopy"
+    positive_prompt: "balloon with Snoopy"
 
   - name: green_background
     negative_prompt: "green background"
-    positive_prompt: "green background Snoopy"
+    positive_prompt: "green background with Snoopy"
 
   - name: girl
     negative_prompt: "girl"
-    positive_prompt: "girl Snoopy"
+    positive_prompt: "girl with Snoopy"
 
   - name: sports_car
     negative_prompt: "sports car"
-    positive_prompt: "sports car Snoopy"
+    positive_prompt: "sports car with Snoopy"
 
   - name: king_crab
     negative_prompt: "king crab"
-    positive_prompt: "king crab Snoopy"
+    positive_prompt: "king crab with Snoopy"
 
   - name: white_background
     negative_prompt: "white background"
-    positive_prompt: "white background Snoopy"
+    positive_prompt: "white background with Snoopy"
 
   - name: bald_eagle
     negative_prompt: "bald eagle"
@@ -39,44 +39,44 @@ pairs:
 
   - name: bench
     negative_prompt: "bench"
-    positive_prompt: "bench Snoopy"
+    positive_prompt: "bench with Snoopy"
 
   - name: black_background
     negative_prompt: "black background"
-    positive_prompt: "black background Snoopy"
+    positive_prompt: "black background with Snoopy"
 
   - name: river
     negative_prompt: "river"
-    positive_prompt: "river Snoopy"
+    positive_prompt: "river with Snoopy"
 
   - name: park
     negative_prompt: "park"
-    positive_prompt: "park Snoopy"
+    positive_prompt: "park with Snoopy"
 
   - name: lake
     negative_prompt: "lake"
-    positive_prompt: "lake Snoopy"
+    positive_prompt: "lake with Snoopy"
 
   - name: house
     negative_prompt: "house"
-    positive_prompt: "house Snoopy"
+    positive_prompt: "house with Snoopy"
 
   - name: yellow_background
     negative_prompt: "yellow background"
-    positive_prompt: "yellow background Snoopy"
+    positive_prompt: "yellow background with Snoopy"
 
   - name: car
     negative_prompt: "car"
-    positive_prompt: "car Snoopy"
+    positive_prompt: "car with Snoopy"
 
   - name: ball
     negative_prompt: "ball"
-    positive_prompt: "ball Snoopy"
+    positive_prompt: "ball with Snoopy"
 
   - name: toy
     negative_prompt: "toy"
-    positive_prompt: "toy Snoopy"
+    positive_prompt: "toy with Snoopy"
 
   - name: near_tree
     negative_prompt: "near tree"
-    positive_prompt: "near tree Snoopy"
+    positive_prompt: "near tree with Snoopy"
