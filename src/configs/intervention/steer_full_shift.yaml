@@ -37,8 +37,6 @@ controller:
   restore_token_norm: true
   restore_eps: 1.0e-6
 
-  validate_runtime: false
-
   regularizer:
     _target_: src.shift.regularizer.BlockwiseSVMRegularizer
 
