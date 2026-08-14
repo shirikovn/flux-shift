@@ -52,6 +52,8 @@ class TokenWiseSteeringController:
         regularizer: Any | None = None,
         use_classifier: bool = False,
         validate_runtime: bool = False,
+        restore_token_norm: bool = True,
+        restore_eps: float = 1.0e-6,
     ) -> None:
         self.vector_store = SteeringVectorStore(
             vector_type=vector_type,
@@ -72,6 +74,12 @@ class TokenWiseSteeringController:
 
         self.regularizer = regularizer
         self.validate_runtime = bool(validate_runtime)
+
+        self.restore_token_norm = bool(restore_token_norm)
+        self.restore_eps = float(restore_eps)
+
+        if self.restore_eps <= 0.0:
+            raise ValueError("restore_eps must be positive.")
 
         self._active_blocks: tuple[int, ...] | None = None
         self._active_steps: tuple[int, ...] | None = None
@@ -213,6 +221,76 @@ class TokenWiseSteeringController:
 
         raise RuntimeError(f"Unsupported runtime vector shape: {tuple(vector.shape)}.")
 
+    def _restore_activation_norm(
+        self,
+        original: torch.Tensor,
+        candidate: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Energy Restoration.
+
+        Steering is allowed to change the direction of each token
+        representation, but not its original L2 magnitude.
+
+            candidate = original + delta
+
+            restored =
+                ||original|| *
+                candidate / ||candidate||
+
+        Norm computation is performed in float32 for numerical
+        stability, then converted back to the activation dtype.
+        """
+        original_f32 = original.float()
+        candidate_f32 = candidate.float()
+
+        original_norm = original_f32.norm(
+            dim=-1,
+            keepdim=True,
+        )
+
+        candidate_norm = candidate_f32.norm(
+            dim=-1,
+            keepdim=True,
+        )
+
+        safe_candidate_norm = candidate_norm.clamp_min(self.restore_eps)
+
+        restored_f32 = candidate_f32 / safe_candidate_norm * original_norm
+
+        # Extremely unlikely, but if steering produces an exactly-zero
+        # token vector there is no direction to normalize. In that case
+        # preserve the original activation instead.
+        zero_mask = candidate_norm <= self.restore_eps
+
+        restored_f32 = torch.where(
+            zero_mask,
+            original_f32,
+            restored_f32,
+        )
+
+        return restored_f32.to(dtype=original.dtype)
+
+    def _estimate_norm_ratio(
+        self,
+        original: torch.Tensor,
+        candidate: torch.Tensor,
+    ) -> float:
+        """
+        Mean per-token:
+
+            ||candidate|| / ||original||
+
+        Energy Restoration should make this approximately 1.0.
+        """
+        original_norm = original.detach().float().norm(dim=-1)
+
+        candidate_norm = candidate.detach().float().norm(dim=-1)
+
+        ratio = candidate_norm / original_norm.clamp_min(self.restore_eps)
+
+        return float(ratio.mean().item())
+
     def apply(
         self,
         block_index: int,
@@ -291,7 +369,53 @@ class TokenWiseSteeringController:
             # dimensions without creating a repeated copy.
             steering_delta = vector.view(1, 1, -1)
 
-        steered = activation + scale * steering_delta
+        # ---------------------------------------------------------
+        # Proposed additive SHIFT intervention.
+        # ---------------------------------------------------------
+
+        raw_steered = activation + scale * steering_delta
+
+        if self.validate_runtime and not torch.isfinite(raw_steered).all():
+            raise RuntimeError("Raw steered activation contains NaN or Inf.")
+
+        # ---------------------------------------------------------
+        # Diagnostics BEFORE Energy Restoration.
+        #
+        # This is important: in the broken Snoopy experiment this
+        # can be enormous. We want to preserve that information.
+        # ---------------------------------------------------------
+
+        raw_norm_ratio = self._estimate_norm_ratio(
+            original=activation,
+            candidate=raw_steered,
+        )
+
+        # ---------------------------------------------------------
+        # Energy Restoration
+        #
+        # Preserve the original per-token activation magnitude,
+        # while retaining the steering-induced direction change.
+        # ---------------------------------------------------------
+
+        if self.restore_token_norm:
+            steered = self._restore_activation_norm(
+                original=activation,
+                candidate=raw_steered,
+            )
+        else:
+            steered = raw_steered
+
+        final_norm_ratio = self._estimate_norm_ratio(
+            original=activation,
+            candidate=steered,
+        )
+
+        self.raw_norm_ratio_by_location[location] = raw_norm_ratio
+
+        self.final_norm_ratio_by_location[location] = final_norm_ratio
+
+        if self.validate_runtime and not torch.isfinite(steered).all():
+            raise RuntimeError("Steered activation contains NaN or Inf.")
 
         if self.validate_runtime and not torch.isfinite(steered).all():
             raise RuntimeError("Steered activation contains " "NaN or Inf.")
@@ -343,6 +467,16 @@ class TokenWiseSteeringController:
     def reset_statistics(self) -> None:
         self.total_calls = 0
         self.modified_calls = 0
+
+        self.raw_norm_ratio_by_location: dict[
+            str,
+            float,
+        ] = {}
+
+        self.final_norm_ratio_by_location: dict[
+            str,
+            float,
+        ] = {}
 
         self.calls_by_location: dict[
             str,
@@ -398,6 +532,10 @@ class TokenWiseSteeringController:
 
         eta_values = [record["eta_cls"] for record in self.classifier_by_location.values()]
 
+        raw_norm_ratios = list(self.raw_norm_ratio_by_location.values())
+
+        final_norm_ratios = list(self.final_norm_ratio_by_location.values())
+
         return {
             "vector_type": self.vector_type,
             "timing_mode": self.timing_mode,
@@ -415,6 +553,9 @@ class TokenWiseSteeringController:
             "eta_cls": self._summary_values(eta_values),
             "effective_strength": (self._summary_values(effective_strengths)),
             "relative_scale": (self._summary_values(relative_scales)),
+            "restore_token_norm": self.restore_token_norm,
+            "raw_norm_ratio": self._summary_values(raw_norm_ratios),
+            "final_norm_ratio": self._summary_values(final_norm_ratios),
         }
 
     def summary(

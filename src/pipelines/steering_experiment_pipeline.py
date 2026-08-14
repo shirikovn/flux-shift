@@ -443,9 +443,21 @@ class SteeringExperimentPipeline:
 
         if statistics is not None:
             self.logger.info(
-                "Modified calls: %s; " "relative scale mean: %s",
+                "SHIFT statistics: "
+                "modified=%s; "
+                "p_cls=%s; "
+                "eta_cls=%s; "
+                "effective_strength=%s; "
+                "relative_scale=%s; "
+                "raw_norm_ratio=%s; "
+                "final_norm_ratio=%s",
                 statistics.get("modified_calls"),
-                statistics.get("relative_scale_mean"),
+                statistics.get("p_cls"),
+                statistics.get("eta_cls"),
+                statistics.get("effective_strength"),
+                statistics.get("relative_scale"),
+                statistics.get("raw_norm_ratio"),
+                statistics.get("final_norm_ratio"),
             )
 
         record = {
