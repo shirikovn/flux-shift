@@ -149,8 +149,8 @@ time python snoopy_benchmark.py \
     benchmark.worker_id=0 \
     benchmark.num_workers=54 \
     benchmark.num_templates=2 \
-    benchmark.output_root=outputs/snoopy_energy_debug \
-    'shift.blocks=[0,1,2,3,4]' \
+    benchmark.output_root=outputs/snoopy_energy_debug_all_blocks \
+    'shift.blocks=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]' \
     'shift.steps=[0,1,2,3]' \
     shift.dit_gamma=100 \
     shift.pooled_gamma=0 \
