@@ -21,28 +21,18 @@ logger = logging.getLogger(__name__)
 def main(config: DictConfig) -> None:
     logger.info(
         "Resolved configuration:\n%s",
-        OmegaConf.to_yaml(
-            config,
-            resolve=True,
-        ),
+        OmegaConf.to_yaml(config, resolve=True),
     )
 
     set_random_seed(int(config.seed))
 
     device = torch.device(str(config.device))
-
     if device.type == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("config.device=cuda, but CUDA is unavailable.")
 
     if device.type == "cuda":
-        logger.info(
-            "CUDA runtime: %s",
-            torch.version.cuda,
-        )
-        logger.info(
-            "GPU: %s",
-            torch.cuda.get_device_name(device),
-        )
+        logger.info("CUDA runtime: %s", torch.version.cuda)
+        logger.info("GPU: %s", torch.cuda.get_device_name(device))
 
     with RunManifest(
         output_dir=str(config.output_dir),
@@ -63,10 +53,7 @@ def main(config: DictConfig) -> None:
         with manifest.stage("model_prepare"):
             model.prepare_for_inference()
 
-        manifest.add_result(
-            "model",
-            model.get_model_report(),
-        )
+        manifest.add_result("model", model.get_model_report())
 
         pipeline = instantiate(
             config.pipeline,
@@ -85,33 +72,18 @@ def main(config: DictConfig) -> None:
 
         intervention_report = model.get_intervention_report()
 
-        manifest.add_result(
-            "collection",
-            results,
-        )
-        manifest.add_result(
-            "intervention_report",
-            intervention_report,
-        )
+        manifest.add_result("collection", results)
+        manifest.add_result("intervention_report", intervention_report)
 
         logger.info(
             "Collection results:\n%s",
-            OmegaConf.to_yaml(
-                OmegaConf.create(results),
-                resolve=True,
-            ),
+            OmegaConf.to_yaml(OmegaConf.create(results), resolve=True),
         )
         logger.info(
             "Intervention report:\n%s",
-            OmegaConf.to_yaml(
-                OmegaConf.create(intervention_report),
-                resolve=True,
-            ),
+            OmegaConf.to_yaml(OmegaConf.create(intervention_report), resolve=True),
         )
-        logger.info(
-            "Run manifest: %s",
-            manifest.path,
-        )
+        logger.info("Run manifest: %s", manifest.path)
 
 
 if __name__ == "__main__":

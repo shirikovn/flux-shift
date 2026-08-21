@@ -19,13 +19,7 @@ logger = logging.getLogger(__name__)
     config_name="collect_pooled_vector",
 )
 def main(config: DictConfig) -> None:
-    logger.info(
-        "Resolved configuration:\n%s",
-        OmegaConf.to_yaml(
-            config,
-            resolve=True,
-        ),
-    )
+    logger.info("Resolved configuration:\n%s", OmegaConf.to_yaml(config, resolve=True))
 
     set_random_seed(int(config.seed))
 
@@ -71,22 +65,13 @@ def main(config: DictConfig) -> None:
         with manifest.stage("pooled_vector_collection"):
             results = pipeline.collect()
 
-        manifest.add_result(
-            "pooled_collection",
-            results,
-        )
+        manifest.add_result("pooled_collection", results)
 
         logger.info(
             "Pooled collection results:\n%s",
-            OmegaConf.to_yaml(
-                OmegaConf.create(results),
-                resolve=True,
-            ),
+            OmegaConf.to_yaml(OmegaConf.create(results), resolve=True),
         )
-        logger.info(
-            "Run manifest: %s",
-            manifest.path,
-        )
+        logger.info("Run manifest: %s", manifest.path)
 
 
 if __name__ == "__main__":

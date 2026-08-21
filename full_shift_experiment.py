@@ -21,10 +21,7 @@ logger = logging.getLogger(__name__)
 def main(config: DictConfig) -> None:
     logger.info(
         "Resolved configuration:\n%s",
-        OmegaConf.to_yaml(
-            config,
-            resolve=True,
-        ),
+        OmegaConf.to_yaml(config, resolve=True),
     )
 
     set_random_seed(int(config.seed))
@@ -52,10 +49,7 @@ def main(config: DictConfig) -> None:
         with manifest.stage("model_prepare"):
             model.prepare_for_inference()
 
-        manifest.add_result(
-            "model",
-            model.get_model_report(),
-        )
+        manifest.add_result("model", model.get_model_report())
 
         pipeline = instantiate(
             config.pipeline,
@@ -77,26 +71,14 @@ def main(config: DictConfig) -> None:
 
         intervention_report = model.get_intervention_report()
 
-        manifest.add_result(
-            "experiment",
-            results,
-        )
-        manifest.add_result(
-            "intervention_report",
-            intervention_report,
-        )
+        manifest.add_result("experiment", results)
+        manifest.add_result("intervention_report", intervention_report)
 
         logger.info(
             "Experiment results:\n%s",
-            OmegaConf.to_yaml(
-                OmegaConf.create(results),
-                resolve=True,
-            ),
+            OmegaConf.to_yaml(OmegaConf.create(results), resolve=True),
         )
-        logger.info(
-            "Run manifest: %s",
-            manifest.path,
-        )
+        logger.info("Run manifest: %s", manifest.path)
 
 
 if __name__ == "__main__":

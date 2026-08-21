@@ -49,9 +49,7 @@ source "/home/nashirikov/.venv/bin/activate"
 mkdir -p logs
 
 
-echo "============================================================"
 echo "SNOOPY TABLE 3 WORKER"
-echo "============================================================"
 
 echo "Date:       $(date)"
 echo "Host:       $(hostname)"
@@ -66,9 +64,7 @@ nvidia-smi
 
 
 echo
-echo "============================================================"
 echo "CHECKING ARTIFACTS"
-echo "============================================================"
 
 
 VECTOR_COUNT=$(
@@ -109,9 +105,7 @@ echo "Artifacts OK"
 
 
 echo
-echo "============================================================"
 echo "STARTING WORKER"
-echo "============================================================"
 
 
 START_TIME=$(date +%s)
@@ -126,9 +120,7 @@ ELAPSED=$((END_TIME - START_TIME))
 
 
 echo
-echo "============================================================"
 echo "WORKER FINISHED"
-echo "============================================================"
 
 echo "Worker ID: ${SLURM_ARRAY_TASK_ID}"
 

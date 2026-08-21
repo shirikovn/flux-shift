@@ -33,9 +33,7 @@ module load python/miniconda
 source "/home/nashirikov/.venv/bin/activate"
 
 
-echo "============================================================"
 echo "SNOOPY ARTIFACT CONSTRUCTION"
-echo "============================================================"
 
 echo "Date: $(date)"
 echo "Host: $(hostname)"
@@ -61,9 +59,7 @@ PY
 
 
 echo
-echo "============================================================"
 echo "1/3 COLLECT DIT ACTIVATIONS"
-echo "============================================================"
 
 time python collect_activations.py \
     dataset=snoopy_20 \
@@ -73,9 +69,7 @@ time python collect_activations.py \
 
 
 echo
-echo "============================================================"
 echo "2/3 TRAIN SVM CLASSIFIERS"
-echo "============================================================"
 
 time python train_svm.py \
     trainer.dataset_dir=artifacts/snoopy/dit/svm_dataset \
@@ -83,9 +77,7 @@ time python train_svm.py \
 
 
 echo
-echo "============================================================"
 echo "3/3 COLLECT POOLED VECTOR"
-echo "============================================================"
 
 time python collect_pooled_vector.py \
     dataset=snoopy_20 \
@@ -96,9 +88,7 @@ time python collect_pooled_vector.py \
 
 
 echo
-echo "============================================================"
 echo "ARTIFACTS"
-echo "============================================================"
 
 find artifacts/snoopy \
     -maxdepth 5 \
@@ -107,6 +97,4 @@ find artifacts/snoopy \
 
 
 echo
-echo "============================================================"
 echo "DONE"
-echo "============================================================"
