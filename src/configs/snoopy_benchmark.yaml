@@ -5,24 +5,13 @@ defaults:
   - pipeline: steering_experiment
   - _self_
 
-
-# Filled according to benchmark.task_id.
 seed: 0
-
 device: cuda
-
 run_dir: ${hydra:runtime.output_dir}
 
 
-# =========================================================
-# SHIFT K=1 reproduction configuration
-# =========================================================
-
 shift:
   artifacts_root: artifacts/snoopy
-
-  # Table-6 "diff sep":
-  # token-wise mean difference.
   vector_type: tokenwise_difference
 
   # One step-0 vector reused for every runtime step.
@@ -71,16 +60,8 @@ shift:
     - 17
     - 18
 
-
   # Steer every double-stream block.
   blocks:
-    - 0
-    - 1
-    - 2
-    - 3
-    - 4
-
-  steps:
     - 0
     - 1
     - 2
@@ -101,6 +82,11 @@ shift:
     - 17
     - 18
 
+  steps:
+    - 0
+    - 1
+    - 2
+    - 3
 
   dit_gamma: 250
   pooled_gamma: 6
@@ -109,18 +95,13 @@ shift:
   eta_max: 4
 
 
-# =========================================================
 # Benchmark
-# =========================================================
-
 benchmark:
   worker_id: ${oc.env:SLURM_ARRAY_TASK_ID,0}
   num_workers: ${oc.env:SNOOPY_NUM_WORKERS,1}
 
   # Can be changed without editing YAML:
-  #
   # export SNOOPY_NUM_TEMPLATES=4
-  #
   # for a smoke test.
   num_templates: ${oc.env:SNOOPY_NUM_TEMPLATES,80}
   output_root: ${oc.env:SNOOPY_OUTPUT_ROOT,outputs/snoopy_table3}
@@ -158,20 +139,14 @@ benchmark:
       text: legislator
 
 
-# =========================================================
 # Generation experiment
-# =========================================================
-
 experiment:
-
   output_dir: ${run_dir}/benchmark
-
 
   resume:
     mode: resume
     verify_images: true
     repair_incomplete: true
-
 
   strengths:
     - ${shift.dit_gamma}
@@ -184,7 +159,6 @@ experiment:
   # otherwise we generate an unnecessary third image
   # for every prompt.
   schedules:
-
     - name: full_shift
 
       blocks: ${shift.blocks}
@@ -209,7 +183,6 @@ experiment:
 
 
 hydra:
-
   run:
     dir: ${benchmark.output_root}/worker_${benchmark.worker_id}/hydra
 
