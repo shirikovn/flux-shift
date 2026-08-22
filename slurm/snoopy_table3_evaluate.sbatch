@@ -40,4 +40,4 @@ module load python/miniconda
 
 source "/home/nashirikov/.venv/bin/activate"
 
-time python snoopy_benchmark.py
+time python evaluate_snoopy_benchmark.py
