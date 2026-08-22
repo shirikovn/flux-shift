@@ -88,7 +88,7 @@ shift:
     - 2
     - 3
 
-  dit_gamma: 250
+  dit_gamma: 500
   pooled_gamma: 6
 
   # Keep the value already used by our implementation.
