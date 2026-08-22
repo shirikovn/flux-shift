@@ -40,4 +40,7 @@ module load python/miniconda
 
 source "/home/nashirikov/.venv/bin/activate"
 
+ln -sf /home/nashirikov/models/inception-2015-12-05.pt \
+       /tmp/inception-2015-12-05.pt
+
 time python evaluate_snoopy_benchmark.py
