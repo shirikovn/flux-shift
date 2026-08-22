@@ -22,4 +22,4 @@ safetensors
 sentencepiece
 
 # eval reqs
-# clean-fid
+clean-fid
