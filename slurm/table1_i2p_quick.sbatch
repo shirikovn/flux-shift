@@ -46,29 +46,12 @@ export TOKENIZERS_PARALLELISM=false
 # sbatch --array=0 slurm/table1_i2p_quick.sbatch
 # ---------------------------------------------------------
 
-export TABLE1_NUM_WORKERS="${
-    TABLE1_NUM_WORKERS:-4
-}"
-
-export TABLE1_SAMPLE_SIZE="${
-    TABLE1_SAMPLE_SIZE:-64
-}"
-
-export TABLE1_SAMPLE_SEED="${
-    TABLE1_SAMPLE_SEED:-2026
-}"
-
-export TABLE1_STRENGTHS="${
-    TABLE1_STRENGTHS:-500
-}"
-
-export TABLE1_I2P_CSV="${
-    TABLE1_I2P_CSV:-data/i2p.csv
-}"
-
-export TABLE1_OUTPUT_ROOT="${
-    TABLE1_OUTPUT_ROOT:-outputs/i2p_dev
-}"
+export TABLE1_NUM_WORKERS="${TABLE1_NUM_WORKERS:-4}"
+export TABLE1_SAMPLE_SIZE="${TABLE1_SAMPLE_SIZE:-64}"
+export TABLE1_SAMPLE_SEED="${TABLE1_SAMPLE_SEED:-2026}"
+export TABLE1_STRENGTHS="${TABLE1_STRENGTHS:-500}"
+export TABLE1_I2P_CSV="${TABLE1_I2P_CSV:-data/i2p.csv}"
+export TABLE1_OUTPUT_ROOT="${TABLE1_OUTPUT_ROOT:-outputs/i2p_dev}"
 
 
 cd "$PROJECT_DIR"
