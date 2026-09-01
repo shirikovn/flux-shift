@@ -16,6 +16,7 @@ DTYPE_MAP: dict[str, torch.dtype] = {
 
 LocationKey = tuple[int, int]
 PairLocationKey = tuple[str, int, int]
+DEFAULT_ACTIVATION_LOCATION = "transformer_block_output_text"
 
 
 class MeanDifferenceCollector:
@@ -41,6 +42,7 @@ class MeanDifferenceCollector:
         normalize: bool = True,
         eps: float = 1.0e-8,
         concept_name: str | None = None,
+        activation_location: str = DEFAULT_ACTIVATION_LOCATION,
     ) -> None:
         if tensor_dtype not in DTYPE_MAP:
             raise ValueError(
@@ -52,6 +54,7 @@ class MeanDifferenceCollector:
         self.normalize = bool(normalize)
         self.eps = float(eps)
         self.concept_name = concept_name
+        self.activation_location = str(activation_location)
 
         self._pending_negatives: dict[
             PairLocationKey,
@@ -302,6 +305,7 @@ class MeanDifferenceCollector:
 
         metadata = {
             "concept_name": self.concept_name,
+            "activation_location": self.activation_location,
             "difference_direction": "positive_minus_negative",
             "tensor_dtype": str(self.tensor_dtype),
             "eps": self.eps,
@@ -358,6 +362,7 @@ class MeanDifferenceCollector:
             "type": (self.__class__.__name__),
             "save_dir": str(self.save_dir),
             "concept_name": (self.concept_name),
+            "activation_location": self.activation_location,
             "tensor_dtype": str(self.tensor_dtype),
             "normalize": self.normalize,
             "num_locations": len(self._difference_sums),
@@ -395,6 +400,7 @@ class PooledSVMDatasetCollector:
         save_dir: str,
         tensor_dtype: str = "float32",
         concept_name: str | None = None,
+        activation_location: str = DEFAULT_ACTIVATION_LOCATION,
     ) -> None:
         if tensor_dtype not in DTYPE_MAP:
             raise ValueError(
@@ -404,6 +410,7 @@ class PooledSVMDatasetCollector:
         self.save_dir = Path(save_dir)
         self.tensor_dtype = DTYPE_MAP[tensor_dtype]
         self.concept_name = concept_name
+        self.activation_location = str(activation_location)
 
         # Key: (block_index, step_index)
         self._features: dict[
@@ -633,6 +640,7 @@ class PooledSVMDatasetCollector:
 
         metadata = {
             "concept_name": self.concept_name,
+            "activation_location": self.activation_location,
             "dataset_type": ("token_averaged_dit_activations"),
             "pooling": "mean_over_text_tokens",
             "tensor_dtype": str(self.tensor_dtype),
@@ -654,6 +662,7 @@ class PooledSVMDatasetCollector:
             "type": self.__class__.__name__,
             "save_dir": str(self.save_dir),
             "concept_name": self.concept_name,
+            "activation_location": self.activation_location,
             "num_locations": len(self._features),
             "sample_counts": {
                 (f"block_{block:02d}" f"_step_{step:02d}"): len(features)
@@ -686,12 +695,14 @@ class CombinedDiTCollector:
         concept_name: str | None = None,
         normalize: bool = True,
         eps: float = 1.0e-8,
+        activation_location: str = DEFAULT_ACTIVATION_LOCATION,
     ) -> None:
         self.save_dir = Path(save_dir)
         self.tensor_dtype = str(tensor_dtype)
         self.concept_name = concept_name
         self.normalize = bool(normalize)
         self.eps = float(eps)
+        self.activation_location = str(activation_location)
 
         if self.eps <= 0:
             raise ValueError("eps must be positive.")
@@ -706,12 +717,14 @@ class CombinedDiTCollector:
             concept_name=self.concept_name,
             normalize=self.normalize,
             eps=self.eps,
+            activation_location=self.activation_location,
         )
 
         self.svm_collector = PooledSVMDatasetCollector(
             save_dir=str(self.save_dir / "svm_dataset"),
             tensor_dtype=self.tensor_dtype,
             concept_name=self.concept_name,
+            activation_location=self.activation_location,
         )
 
         self.total_add_calls = 0
@@ -787,6 +800,7 @@ class CombinedDiTCollector:
         combined_metadata = {
             "collector_type": (self.__class__.__name__),
             "concept_name": (self.concept_name),
+            "activation_location": self.activation_location,
             "tensor_dtype": (self.tensor_dtype),
             "normalize_vectors": (self.normalize),
             "eps": self.eps,

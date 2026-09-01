@@ -7,10 +7,12 @@ from typing import Any
 import joblib
 import numpy as np
 import torch
+from omegaconf import OmegaConf
 
 from src.utils.hashing import sha256_file_set
 
 ClassifierLocation = tuple[int, int]
+EXPECTED_ACTIVATION_LOCATION = "transformer_block_output_text"
 
 
 class BlockwiseSVMRegularizer:
@@ -49,7 +51,8 @@ class BlockwiseSVMRegularizer:
         timing_mode: str = "per_step",
         source_step: int = 0,
         eps: float = 1.0e-6,
-        eta_max: float = 4.0,
+        eta_max: float = 20.0,
+        expected_activation_location: str = EXPECTED_ACTIVATION_LOCATION,
     ) -> None:
         self.classifier_directory = Path(classifier_directory)
 
@@ -64,6 +67,7 @@ class BlockwiseSVMRegularizer:
         self.source_step = int(source_step)
         self.eps = float(eps)
         self.eta_max = float(eta_max)
+        self.expected_activation_location = str(expected_activation_location)
 
         if not self.classifier_directory.is_dir():
             raise FileNotFoundError(
@@ -88,6 +92,8 @@ class BlockwiseSVMRegularizer:
 
         if self.eta_max <= 0:
             raise ValueError("eta_max must be positive.")
+
+        self._metadata = self._validate_metadata()
 
         source_steps = [self.source_step] if self.timing_mode == "shared" else self.step_indices
 
@@ -125,6 +131,43 @@ class BlockwiseSVMRegularizer:
                 step,
             ), path in self._classifier_paths.items()
         )
+
+    def _validate_metadata(self) -> dict[str, Any]:
+        metadata_path = self.classifier_directory / "metadata.yaml"
+
+        if not metadata_path.is_file():
+            raise FileNotFoundError(
+                f"Classifier metadata is missing: {metadata_path}. "
+                "Retrain the block-output SVM artifacts before inference."
+            )
+
+        document = OmegaConf.to_container(
+            OmegaConf.load(metadata_path),
+            resolve=True,
+        )
+
+        if not isinstance(document, dict):
+            raise RuntimeError(f"Invalid classifier metadata: {metadata_path}")
+
+        location = str(document.get("activation_location", "missing"))
+
+        if location != self.expected_activation_location:
+            raise RuntimeError(
+                "Incompatible classifier activation location: "
+                f"expected {self.expected_activation_location!r}, got {location!r}. "
+                "Do not use classifiers trained from attn.to_add_out features."
+            )
+
+        normalization = str(document.get("feature_normalization", "missing"))
+
+        if normalization != "sample_l2":
+            raise RuntimeError(
+                "Incompatible SVM feature normalization: "
+                f"expected 'sample_l2', got {normalization!r}. "
+                "Retrain with trainer.l2_normalize=true."
+            )
+
+        return document
 
     def _load_classifier(
         self,
@@ -314,34 +357,23 @@ class BlockwiseSVMRegularizer:
                 f"classifier={expected_features}."
             )
 
-        probabilities = classifier.predict_proba(pooled)
-
         positive_index = self._positive_class_indices[source_location]
 
-        p_cls = float(
-            probabilities[
-                0,
-                positive_index,
-            ]
-        )
+        if hasattr(classifier, "predict_member_probabilities"):
+            probabilities = classifier.predict_member_probabilities(pooled)
+            positive_probabilities = probabilities[:, 0, positive_index]
+        else:
+            probabilities = classifier.predict_proba(pooled)
+            positive_probabilities = probabilities[:, positive_index]
 
-        p_cls = float(
-            np.clip(
-                p_cls,
-                0.0,
-                1.0,
-            )
-        )
+        positive_probabilities = np.clip(positive_probabilities, 0.0, 1.0)
+        p_cls = float(np.mean(positive_probabilities))
 
-        eta_cls = 1.0 / ((1.0 - p_cls) + self.eps) - 1.0
-
-        eta_cls = float(
-            np.clip(
-                eta_cls,
-                0.0,
-                self.eta_max,
-            )
-        )
+        # The released implementation converts each ensemble member's
+        # probability to odds first, clips it, and only then averages.
+        member_eta = 1.0 / ((1.0 - positive_probabilities) + self.eps) - 1.0
+        member_eta = np.clip(member_eta, 0.0, self.eta_max)
+        eta_cls = float(np.mean(member_eta))
 
         return (
             p_cls,
@@ -369,6 +401,9 @@ class BlockwiseSVMRegularizer:
             "step_indices": (list(self.step_indices) if self.timing_mode == "per_step" else None),
             "eps": self.eps,
             "eta_max": self.eta_max,
+            "activation_location": self._metadata["activation_location"],
+            "feature_normalization": self._metadata["feature_normalization"],
+            "ensemble_size": self._metadata.get("ensemble_size"),
             "artifact_fingerprint": (
                 self.artifact_fingerprint
             ),

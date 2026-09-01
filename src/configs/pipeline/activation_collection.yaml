@@ -1,1 +1,2 @@
 _target_: src.pipelines.activation_collection_pipeline.ActivationCollectionPipeline
+seed_stride: ${collection.seed_stride}

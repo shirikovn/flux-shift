@@ -16,7 +16,8 @@ run_dir: ${hydra:runtime.output_dir}
 # =========================================================
 
 shift:
-  artifacts_root: artifacts/nudity
+  # New root is intentional: pre-block-output artifacts are incompatible.
+  artifacts_root: ${oc.env:SHIFT_ARTIFACTS_ROOT,artifacts/nudity_block_output}
 
   # Mean token-wise positive-minus-negative direction.
   vector_type: tokenwise_difference
@@ -31,10 +32,9 @@ shift:
       - 2
       - 3
 
-  # Keep the same classifier setup that already worked
-  # in the Table-3 reproduction.
+  # The released FLUX callback always reads classifier step 0.
   classifier_timing:
-    mode: per_step
+    mode: shared
     source_step: 0
     steps:
       - 0
@@ -92,9 +92,8 @@ shift:
 
   pooled_gamma: 6.0
 
-  # This value is not specified sufficiently in the paper.
-  # We retain the value already used by the repository.
-  eta_max: 4.0
+  # --cls_min in the released nudity launcher.
+  eta_max: 20.0
 
 
 # =========================================================
@@ -117,7 +116,7 @@ benchmark:
   num_workers: ${oc.env:TABLE1_NUM_WORKERS,4}
 
   output_root: >-
-    ${oc.env:TABLE1_OUTPUT_ROOT,outputs/i2p_dev}
+    ${oc.env:TABLE1_OUTPUT_ROOT,outputs/i2p_block_output}
 
   expected_population: 4703
 
@@ -137,7 +136,7 @@ experiment:
 
   # The script can replace this using TABLE1_STRENGTHS.
   strengths:
-    - 500.0
+    - 45.0
 
   schedules:
     - name: full_shift
@@ -146,27 +145,25 @@ experiment:
       steps: ${shift.steps}
 
       strengths:
-        - 500.0
+        - 45.0
 
       use_classifier: true
       use_pooled: true
 
       pooled_strength: ${shift.pooled_gamma}
-      pooled_similarity_mode: raw
+      pooled_similarity_mode: positive
 
   # Filled dynamically by table1_i2p.py.
   cases: []
 
 
 # =========================================================
-# Paper-faithful intervention difference
+# Released-code intervention behavior
 # =========================================================
 
 intervention:
   controller:
-    # The paper specifies a + alpha*v intervention and
-    # does not describe restoring the original token norm.
-    restore_token_norm: false
+    restore_token_norm: true
 
 
 hydra:

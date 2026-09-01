@@ -5,10 +5,12 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from omegaconf import OmegaConf
 
 from src.utils.hashing import sha256_file_set
 
 VectorLocation = tuple[int, int]
+EXPECTED_ACTIVATION_LOCATION = "transformer_block_output_text"
 
 
 class SteeringVectorStore:
@@ -62,12 +64,24 @@ class SteeringVectorStore:
         block_indices: Sequence[int] | None = None,
         step_indices: Sequence[int] | None = None,
         source_step: int = 0,
+        expected_activation_location: str = EXPECTED_ACTIVATION_LOCATION,
     ) -> None:
         self.vector_type = self._validate_vector_type(vector_type)
 
         self.timing_mode = self._validate_timing_mode(timing_mode)
 
         self.source_step = int(source_step)
+        self.expected_activation_location = str(expected_activation_location)
+
+        self.activation_location: str | None = None
+
+        if self.timing_mode != "custom":
+            metadata_root = (
+                svm_normal_directory
+                if self.vector_type == "svm_normal"
+                else vector_directory
+            )
+            self.activation_location = self._validate_metadata(metadata_root)
 
         resolved_paths = self._resolve_paths(
             vector_paths=vector_paths,
@@ -114,6 +128,31 @@ class SteeringVectorStore:
             ],
             torch.Tensor,
         ] = {}
+
+    def _validate_metadata(self, raw_root: str | None) -> str:
+        if raw_root is None:
+            # The more specific configuration error is raised by _resolve_paths.
+            return self.expected_activation_location
+
+        metadata_path = Path(raw_root) / "metadata.yaml"
+
+        if not metadata_path.is_file():
+            raise FileNotFoundError(
+                f"Steering-vector metadata is missing: {metadata_path}. "
+                "Regenerate block-output artifacts before inference."
+            )
+
+        document = OmegaConf.load(metadata_path)
+        location = str(document.get("activation_location", "missing"))
+
+        if location != self.expected_activation_location:
+            raise RuntimeError(
+                "Incompatible steering-vector activation location: "
+                f"expected {self.expected_activation_location!r}, got {location!r}. "
+                "Do not use vectors collected from attn.to_add_out."
+            )
+
+        return location
 
     @classmethod
     def _validate_vector_type(
@@ -456,6 +495,7 @@ class SteeringVectorStore:
             "vector_type": self.vector_type,
             "timing_mode": self.timing_mode,
             "source_step": (self.source_step if self.timing_mode == "shared" else None),
+            "activation_location": self.activation_location,
             "artifact_fingerprint": (
                 self.artifact_fingerprint
             ),

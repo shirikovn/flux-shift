@@ -26,15 +26,15 @@ block_indices:
 
 step_indices:
   - 0
-  - 1
-  - 2
-  - 3
 
-# 4 пары validation, 16 пар train.
-validation_fraction: 0.2
-random_seed: 123
+# Authors' release: two independently seeded stratified 60/40 splits.
+validation_fraction: 0.4
+random_seed: 42
 
 c: 1.0
-class_weight: balanced
-standardize: true
+class_weight: null
+standardize: false
+l2_normalize: true
+ensemble_size: 2
 probability: true
+expected_activation_location: transformer_block_output_text

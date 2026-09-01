@@ -40,9 +40,18 @@ class TransformerStepHook:
         return None
 
 
-class ShiftTextAttentionHook:
+class ShiftTextBlockOutputHook:
     """
-    Hook immediately before attn.to_add_out.
+    Hook the output of a complete FLUX double-stream block.
+
+    Diffusers returns:
+
+        (encoder_hidden_states, hidden_states)
+        (text tokens, image tokens)
+
+    SHIFT is applied to the text residual representation that the
+    next transformer block receives. This matches the activation
+    location used by the authors' released FLUX nudity launcher.
 
     Depending on state.mode it:
       - disabled: observes only;
@@ -66,25 +75,27 @@ class ShiftTextAttentionHook:
         self,
         module: torch.nn.Module,
         inputs: tuple[Any, ...],
-    ) -> tuple[torch.Tensor] | None:
+        output: Any,
+    ) -> tuple[Any, ...] | None:
         del module
+        del inputs
 
-        if len(inputs) != 1:
+        if not isinstance(output, tuple) or len(output) < 2:
             raise RuntimeError(
-                "Expected attn.to_add_out to receive "
-                "exactly one positional input, got "
-                f"{len(inputs)}."
+                "Expected a FLUX double-stream block output tuple "
+                "(text_tokens, image_tokens), got "
+                f"{type(output)!r}."
             )
 
-        activation = inputs[0]
+        activation = output[0]
 
         if not isinstance(
             activation,
             torch.Tensor,
         ):
             raise TypeError(
-                "Expected torch.Tensor as input to "
-                "attn.to_add_out, got "
+                "Expected the first FLUX block output to be "
+                "a text-token Tensor, got "
                 f"{type(activation)!r}."
             )
 
@@ -114,6 +125,6 @@ class ShiftTextAttentionHook:
             if steered is activation:
                 return None
 
-            return (steered,)
+            return (steered, *output[1:])
 
         return None

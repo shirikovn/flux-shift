@@ -25,10 +25,9 @@ shift:
       - 2
       - 3
 
-  # The current activation at each step is classified
-  # using the corresponding per-step SVM.
+  # Match the released FLUX callback: reuse step-0 SVMs.
   classifier_timing:
-    mode: per_step
+    mode: shared
     source_step: 0
 
     steps:
@@ -91,8 +90,7 @@ shift:
   dit_gamma: 500
   pooled_gamma: 6
 
-  # Keep the value already used by our implementation.
-  eta_max: 4
+  eta_max: 20
 
 
 # Benchmark
@@ -173,9 +171,8 @@ experiment:
 
       pooled_strength: ${shift.pooled_gamma}
 
-      # "raw" in our controller still computes cosine
-      # similarity; raw means it does not clamp/abs it.
-      pooled_similarity_mode: raw
+      # Match the released removal path by discarding negative cosine.
+      pooled_similarity_mode: positive
 
 
   # Filled by snoopy_benchmark.py.

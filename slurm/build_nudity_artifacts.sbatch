@@ -25,6 +25,7 @@ export HF_HOME=/home/nashirikov/huggingface
 export HF_HUB_OFFLINE=1
 export PYTHONUNBUFFERED=1
 export TOKENIZERS_PARALLELISM=false
+export SHIFT_ARTIFACTS_ROOT="${SHIFT_ARTIFACTS_ROOT:-artifacts/nudity_block_output}"
 
 
 cd "$PROJECT_DIR"
@@ -76,7 +77,7 @@ time python collect_activations.py \
     dataset=nudity_135 \
     model=flux_schnell_v100 \
     generation=schnell_512 \
-    hydra.run.dir=artifacts/nudity/dit
+    hydra.run.dir="${SHIFT_ARTIFACTS_ROOT}/dit"
 
 
 echo
@@ -85,8 +86,8 @@ echo "2/3 TRAIN SVM CLASSIFIERS"
 echo "=========================================="
 
 time python train_svm.py \
-    trainer.dataset_dir=artifacts/nudity/dit/svm_dataset \
-    hydra.run.dir=artifacts/nudity/svm_training
+    trainer.dataset_dir="${SHIFT_ARTIFACTS_ROOT}/dit/svm_dataset" \
+    hydra.run.dir="${SHIFT_ARTIFACTS_ROOT}/svm_training"
 
 
 echo
@@ -99,7 +100,7 @@ time python collect_pooled_vector.py \
     model=flux_schnell_v100 \
     generation=schnell_512 \
     target_prompt=nudity \
-    hydra.run.dir=artifacts/nudity/pooled
+    hydra.run.dir="${SHIFT_ARTIFACTS_ROOT}/pooled"
 
 
 echo
@@ -109,7 +110,7 @@ echo "=========================================="
 
 VECTOR_COUNT=$(
     find \
-        artifacts/nudity/dit/vectors \
+        "${SHIFT_ARTIFACTS_ROOT}/dit/vectors" \
         -type f \
         -name 'step_00_vector.pt' \
         | wc -l
@@ -117,7 +118,7 @@ VECTOR_COUNT=$(
 
 CLASSIFIER_COUNT=$(
     find \
-        artifacts/nudity/svm_training/classifiers \
+        "${SHIFT_ARTIFACTS_ROOT}/svm_training/classifiers" \
         -type f \
         -name 'step_*_classifier.joblib' \
         | wc -l
@@ -134,22 +135,25 @@ if [[ "${VECTOR_COUNT}" -ne 19 ]]; then
 fi
 
 
-if [[ "${CLASSIFIER_COUNT}" -ne 76 ]]; then
-    echo "ERROR: expected 76 classifiers."
+if [[ "${CLASSIFIER_COUNT}" -ne 19 ]]; then
+    echo "ERROR: expected 19 shared step-0 classifiers."
     exit 1
 fi
 
 
 test -f \
-    artifacts/nudity/pooled/pooled/pooled_vector.pt
+    "${SHIFT_ARTIFACTS_ROOT}/pooled/pooled/pooled_vector.pt"
 
 test -f \
-    artifacts/nudity/pooled/pooled/target_embedding.pt
+    "${SHIFT_ARTIFACTS_ROOT}/pooled/pooled/target_embedding.pt"
+
+python inspect_shift_artifacts.py \
+    --root "${SHIFT_ARTIFACTS_ROOT}"
 
 
 echo
 echo "Artifact files:"
-find artifacts/nudity \
+find "${SHIFT_ARTIFACTS_ROOT}" \
     -maxdepth 5 \
     -type f \
     | sort

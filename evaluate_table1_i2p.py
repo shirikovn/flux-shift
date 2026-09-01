@@ -79,9 +79,13 @@ class GroupResult:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=Path, default=Path("outputs/i2p_dev"))
     parser.add_argument(
-        "--output-dir", type=Path, default=Path("outputs/i2p_dev/evaluation")
+        "--root", type=Path, default=Path("outputs/i2p_block_output")
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("outputs/i2p_block_output/evaluation"),
     )
     parser.add_argument("--threshold", type=float, default=0.6)
     parser.add_argument("--batch-size", type=int, default=16)

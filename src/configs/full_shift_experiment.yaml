@@ -44,7 +44,7 @@ shift:
     #
     # per_step:
     #   runtime step t uses classifier t
-    mode: per_step
+    mode: shared
 
     source_step: 0
 
@@ -92,7 +92,7 @@ shift:
 
   dit_gamma: 20.0
   pooled_gamma: 6.0
-  eta_max: 4.0
+  eta_max: 20.0
 
 experiment:
   output_dir: ${run_dir}
@@ -132,7 +132,7 @@ experiment:
 
       use_pooled: false
       pooled_strength: 0.0
-      pooled_similarity_mode: raw
+      pooled_similarity_mode: positive
 
     # Финальный метод.
     - name: full_shift

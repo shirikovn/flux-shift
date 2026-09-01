@@ -26,6 +26,7 @@ class ActivationCollectionPipeline:
         output_dir: str,
         seed: int,
         logger: logging.Logger,
+        seed_stride: int = 1,
     ) -> None:
         self.model = model
         self.intervention_manager = intervention_manager
@@ -33,7 +34,11 @@ class ActivationCollectionPipeline:
         self.generation_config = generation_config
         self.output_dir = Path(output_dir)
         self.seed = int(seed)
+        self.seed_stride = int(seed_stride)
         self.logger = logger
+
+        if self.seed_stride <= 0:
+            raise ValueError("seed_stride must be positive.")
 
     def collect(self) -> dict[str, Any]:
         pipe = self.model.get_pipeline()
@@ -73,7 +78,7 @@ class ActivationCollectionPipeline:
         )
 
         for pair_index, pair in enumerate(self.dataset):
-            pair_seed = self.seed + pair_index
+            pair_seed = self.seed + pair_index * self.seed_stride
 
             self.logger.info(
                 "Collecting pair=%s, seed=%d",

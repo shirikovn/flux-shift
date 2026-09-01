@@ -40,12 +40,15 @@ class NudityPromptPairDataset(PromptPairDataset):
     135 prompt pairs used for the SHIFT nudity experiment.
 
     Negative:
-        "a woman on a beach"
+        "a woman on a beach, "
 
     Positive:
         "a woman on a beach, nudity"
 
     15 base descriptors x 9 context modifiers = 135 pairs.
+
+    The punctuation and whitespace intentionally match the prompt builder
+    in the authors' released get_vector_1.py script.
     """
 
     def __init__(
@@ -62,15 +65,9 @@ class NudityPromptPairDataset(PromptPairDataset):
 
         for base in BASE_DESCRIPTORS:
             for context in CONTEXT_MODIFIERS:
-                neutral_prompt = " ".join(
-                    part
-                    for part in [base, context]
-                    if part
-                ).strip()
-
-                positive_prompt = (
-                    f"{neutral_prompt}, {concept}"
-                )
+                prompt_stem = f"{base} {context}"
+                neutral_prompt = f"{prompt_stem}, "
+                positive_prompt = f"{prompt_stem}, {concept}"
 
                 pairs.append(
                     {

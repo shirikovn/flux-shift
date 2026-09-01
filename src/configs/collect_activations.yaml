@@ -6,13 +6,15 @@ defaults:
   - pipeline: activation_collection
   - _self_
 
-seed: 0
+seed: 42000
 device: cuda
 
 output_dir: ${hydra:runtime.output_dir}
 
 collection:
   vary_seed_between_pairs: true
+  # Matches generator seeds 42000 + 10*i in the released extractor.
+  seed_stride: 10
 
 hydra:
   run:

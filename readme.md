@@ -11,7 +11,7 @@ Inference-time activation steering for `black-forest-labs/FLUX.1-schnell`.
 The repository provides four main scripts:
 
 1. `collect_activations.py` — collect DiT steering vectors and an SVM dataset.
-2. `train_svm.py` — train block/step-specific SVM classifiers and export SVM-normal vectors.
+2. `train_svm.py` — train two-member, L2-normalized linear-SVM ensembles and export SVM-normal vectors.
 3. `collect_pooled_vector.py` — collect pooled CLIP steering artifacts.
 4. `full_shift_experiment.py` — generate baseline and steered images.
 
@@ -29,12 +29,12 @@ python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 ```
 
-The default model configuration uses:
+The cluster/V100 model configuration uses:
 
 - `black-forest-labs/FLUX.1-schnell`;
-- BF16;
+- FP16 (V100 does not provide native BF16 tensor-core support);
 - a pinned model revision;
-- sequential CPU offloading;
+- model CPU offloading;
 - VAE slicing and tiling.
 
 Make sure the model is accessible from your Hugging Face account.
@@ -136,7 +136,7 @@ python collect_activations.py \
 | `seed` | Base random seed |
 | `hydra.run.dir` | Artifact output directory |
 
-The default collection configuration uses blocks `0–18` and steps `0–3`, giving 76 block/step locations.
+The authors-aligned default hooks the text output of complete FLUX double-stream blocks. It collects blocks `0–18` at step `0`, giving 19 locations. Those artifacts are reused at all four runtime steps, matching the released FLUX nudity callback while shortening V100 collection substantially.
 
 The collection pipeline skips VAE decoding. When only an early subset of diffusion steps is requested, it stops after the last requested step.
 
@@ -171,15 +171,17 @@ SVM training runs on the CPU.
 | `trainer.dataset_dir` | SVM dataset produced by Stage 1 |
 | `trainer.block_indices` | Blocks for which classifiers are trained |
 | `trainer.step_indices` | Diffusion steps for which classifiers are trained |
-| `trainer.validation_fraction` | Fraction of prompt pairs used for validation |
+| `trainer.validation_fraction` | Fraction of samples used for validation |
 | `trainer.random_seed` | Train/validation split seed |
 | `trainer.c` | Linear SVM regularization parameter |
 | `trainer.class_weight` | SVM class weighting |
-| `trainer.standardize` | Apply `StandardScaler` before the SVM |
+| `trainer.standardize` | Optional legacy `StandardScaler`; disabled for authors-aligned runs |
+| `trainer.l2_normalize` | L2-normalize each pooled activation; required for authors-aligned runs |
+| `trainer.ensemble_size` | Number of independently split probability SVMs; default `2` |
 | `trainer.probability` | Enable `predict_proba`; required for dynamic steering |
 | `hydra.run.dir` | Training output directory |
 
-The default configuration trains one classifier for each of 19 blocks and four steps, giving 76 classifiers.
+The default trains one two-member ensemble for each of 19 blocks at step 0, giving 19 classifier files. Members use the released code's stratified 60/40 splits with seeds 42 and 43.
 
 ### Produced artifacts
 
@@ -566,7 +568,7 @@ generation:
   height: 512
   num_inference_steps: 4
   guidance_scale: 0.0
-  max_sequence_length: 256
+  max_sequence_length: 512
   num_images_per_prompt: 1
 ```
 
@@ -732,9 +734,74 @@ python full_shift_experiment.py \
   hydra.run.dir=outputs/cyberpunk/reference_1024
 ```
 
+# Short V100 I2P workflow
+
+Prepare the frozen I2P CSV once on a machine with network access:
+
+```bash
+python prepare_i2p.py --output data/i2p.csv
+```
+
+Build new block-output artifacts. The new root prevents accidental reuse of the incompatible `attn.to_add_out` artifacts:
+
+```bash
+ARTIFACT_JOB=$(sbatch --parsable slurm/build_nudity_artifacts.sbatch)
+echo "${ARTIFACT_JOB}"
+```
+
+Run a 16-prompt, one-GPU smoke test after artifact construction and evaluate it:
+
+```bash
+GEN_JOB=$(
+  TABLE1_SAMPLE_SIZE=16 \
+  TABLE1_NUM_WORKERS=1 \
+  TABLE1_STRENGTHS=45 \
+  sbatch --parsable \
+    --dependency="afterok:${ARTIFACT_JOB}" \
+    --array=0 \
+    slurm/table1_i2p_quick.sbatch
+)
+
+sbatch --dependency="afterok:${GEN_JOB}" \
+  slurm/table1_i2p_evaluate.sbatch
+```
+
+If the smoke-test images and SVM probabilities look sensible, expand the released-code setting to 64 or 256 prompts on four V100s. Keep the same strength set in a resumable output root:
+
+```bash
+TABLE1_SAMPLE_SIZE=64 \
+TABLE1_NUM_WORKERS=4 \
+TABLE1_STRENGTHS=45 \
+sbatch --array=0-3 slurm/table1_i2p_quick.sbatch
+
+TABLE1_SAMPLE_SIZE=256 \
+TABLE1_NUM_WORKERS=4 \
+TABLE1_STRENGTHS=45 \
+sbatch --array=0-3 slurm/table1_i2p_quick.sbatch
+```
+
+The released GitHub launcher uses strength 45, while the paper table reports strengths 250 and 500. Test the paper strengths in a separate resumable output root so the evaluator never sees incomplete strength groups:
+
+```bash
+TABLE1_SAMPLE_SIZE=64 \
+TABLE1_NUM_WORKERS=4 \
+TABLE1_STRENGTHS=250,500 \
+TABLE1_OUTPUT_ROOT=outputs/i2p_paper_gamma_dev \
+sbatch --array=0-3 slurm/table1_i2p_quick.sbatch
+
+TABLE1_OUTPUT_ROOT=outputs/i2p_paper_gamma_dev \
+sbatch slurm/table1_i2p_evaluate.sbatch
+```
+
+Evaluate any completed prefix directly with:
+
+```bash
+sbatch slurm/table1_i2p_evaluate.sbatch
+```
+
 # Artifact checks
 
-For a complete default artifact set, these commands should each print `76`:
+For the shortened authors-aligned artifact set, these commands should each print `19`:
 
 ```bash
 find artifacts/<concept>/dit/vectors \

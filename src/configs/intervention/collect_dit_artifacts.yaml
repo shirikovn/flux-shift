@@ -23,15 +23,10 @@ blocks:
   - 17
   - 18
 
-# Collect all four FLUX.1-schnell diffusion steps.
-#
-# The pipeline skips VAE decoding. When only an early subset
-# is requested, it stops after the final requested step.
+# The released FLUX inference callback always selects step 0.
+# Collect only that step and reuse it at all four runtime steps.
 steps:
   - 0
-  - 1
-  - 2
-  - 3
 
 controller: null
 pooled_controller: null
@@ -50,6 +45,7 @@ collector:
   # Имя необязательно: концепция уже отражена
   # в пути artifacts/<concept>.
   concept_name: null
+  activation_location: transformer_block_output_text
 
   normalize: true
   eps: 1.0e-8

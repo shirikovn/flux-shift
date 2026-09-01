@@ -35,7 +35,7 @@ export TOKENIZERS_PARALLELISM=false
 # Development ladder (each larger run resumes the prefix):
 #
 # TABLE1_SAMPLE_SIZE=64 \
-# TABLE1_STRENGTHS=500 \
+# TABLE1_STRENGTHS=45 \
 # sbatch slurm/table1_i2p_quick.sbatch
 #
 # To use one GPU for a smoke test, override both the array
@@ -49,9 +49,10 @@ export TOKENIZERS_PARALLELISM=false
 export TABLE1_NUM_WORKERS="${TABLE1_NUM_WORKERS:-4}"
 export TABLE1_SAMPLE_SIZE="${TABLE1_SAMPLE_SIZE:-64}"
 export TABLE1_SAMPLE_SEED="${TABLE1_SAMPLE_SEED:-2026}"
-export TABLE1_STRENGTHS="${TABLE1_STRENGTHS:-500}"
+export TABLE1_STRENGTHS="${TABLE1_STRENGTHS:-45}"
 export TABLE1_I2P_CSV="${TABLE1_I2P_CSV:-data/i2p.csv}"
-export TABLE1_OUTPUT_ROOT="${TABLE1_OUTPUT_ROOT:-outputs/i2p_dev}"
+export TABLE1_OUTPUT_ROOT="${TABLE1_OUTPUT_ROOT:-outputs/i2p_block_output}"
+export SHIFT_ARTIFACTS_ROOT="${SHIFT_ARTIFACTS_ROOT:-artifacts/nudity_block_output}"
 
 
 cd "$PROJECT_DIR"
@@ -76,6 +77,7 @@ echo "Sample seed: ${TABLE1_SAMPLE_SEED}"
 echo "Strengths: ${TABLE1_STRENGTHS}"
 echo "Dataset: ${TABLE1_I2P_CSV}"
 echo "Output: ${TABLE1_OUTPUT_ROOT}"
+echo "Artifacts: ${SHIFT_ARTIFACTS_ROOT}"
 echo
 
 
@@ -104,7 +106,7 @@ echo "=========================================="
 
 VECTOR_COUNT=$(
     find \
-        artifacts/nudity/dit/vectors \
+        "${SHIFT_ARTIFACTS_ROOT}/dit/vectors" \
         -type f \
         -name 'step_00_vector.pt' \
         | wc -l
@@ -112,7 +114,7 @@ VECTOR_COUNT=$(
 
 CLASSIFIER_COUNT=$(
     find \
-        artifacts/nudity/svm_training/classifiers \
+        "${SHIFT_ARTIFACTS_ROOT}/svm_training/classifiers" \
         -type f \
         -name 'step_*_classifier.joblib' \
         | wc -l
@@ -129,17 +131,20 @@ if [[ "${VECTOR_COUNT}" -ne 19 ]]; then
 fi
 
 
-if [[ "${CLASSIFIER_COUNT}" -ne 76 ]]; then
-    echo "ERROR: expected 76 SVM classifiers."
+if [[ "${CLASSIFIER_COUNT}" -ne 19 ]]; then
+    echo "ERROR: expected 19 shared step-0 SVM classifiers."
     exit 1
 fi
 
 
 test -f \
-    artifacts/nudity/pooled/pooled/pooled_vector.pt
+    "${SHIFT_ARTIFACTS_ROOT}/pooled/pooled/pooled_vector.pt"
 
 test -f \
-    artifacts/nudity/pooled/pooled/target_embedding.pt
+    "${SHIFT_ARTIFACTS_ROOT}/pooled/pooled/target_embedding.pt"
+
+python inspect_shift_artifacts.py \
+    --root "${SHIFT_ARTIFACTS_ROOT}"
 
 
 echo "Artifacts OK"

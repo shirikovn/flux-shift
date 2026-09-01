@@ -16,21 +16,62 @@ from sklearn.metrics import (
     log_loss,
     roc_auc_score,
 )
-from sklearn.model_selection import (
-    GroupShuffleSplit,
-)
+from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import Normalizer, StandardScaler
 from sklearn.svm import SVC
+
+
+EXPECTED_ACTIVATION_LOCATION = "transformer_block_output_text"
+
+
+class ProbabilitySVCEnsemble:
+    """Small probability ensemble compatible with the runtime regularizer."""
+
+    def __init__(self, models: Sequence[Pipeline]) -> None:
+        self.models = list(models)
+
+        if not self.models:
+            raise ValueError("An SVM ensemble requires at least one model.")
+
+        reference_classes = np.asarray(self.models[0].classes_)
+        reference_features = int(self.models[0].n_features_in_)
+
+        for model in self.models[1:]:
+            if not np.array_equal(np.asarray(model.classes_), reference_classes):
+                raise ValueError("SVM ensemble members have different classes.")
+
+            if int(model.n_features_in_) != reference_features:
+                raise ValueError("SVM ensemble members have different feature dimensions.")
+
+        self.classes_ = reference_classes
+        self.n_features_in_ = reference_features
+
+    def predict_proba(self, features: np.ndarray) -> np.ndarray:
+        return np.mean(self.predict_member_probabilities(features), axis=0)
+
+    def predict_member_probabilities(self, features: np.ndarray) -> np.ndarray:
+        """Return probabilities as [ensemble, samples, classes]."""
+        probabilities = [model.predict_proba(features) for model in self.models]
+        return np.stack(probabilities, axis=0)
+
+    def predict(self, features: np.ndarray) -> np.ndarray:
+        probabilities = self.predict_proba(features)
+        return self.classes_[np.argmax(probabilities, axis=1)]
+
+    def decision_function(self, features: np.ndarray) -> np.ndarray:
+        scores = [model.decision_function(features) for model in self.models]
+        return np.mean(np.stack(scores, axis=0), axis=0)
 
 
 class LinearSVMTrainer:
     """
-    Trains one token-pooled linear SVM classifier per FLUX block.
+    Trains an ensemble of token-pooled linear SVMs per FLUX location.
 
-    Validation splitting is performed by prompt-pair name, ensuring
-    that positive and negative samples from the same pair cannot be
-    separated between train and validation.
+    The authors' released implementation mean-pools text tokens and
+    L2-normalizes every sample before fitting a linear probability SVC.
+    Like the released code, each ensemble member is retained after a
+    stratified 60/40 sample split instead of being refit on all samples.
     """
 
     def __init__(
@@ -39,12 +80,15 @@ class LinearSVMTrainer:
         output_dir: str,
         block_indices: Sequence[int],
         step_indices: Sequence[int] = (0,),
-        validation_fraction: float = 0.2,
-        random_seed: int = 123,
+        validation_fraction: float = 0.4,
+        random_seed: int = 42,
         c: float = 1.0,
-        class_weight: str | None = "balanced",
-        standardize: bool = True,
+        class_weight: str | None = None,
+        standardize: bool = False,
+        l2_normalize: bool = True,
+        ensemble_size: int = 2,
         probability: bool = True,
+        expected_activation_location: str = EXPECTED_ACTIVATION_LOCATION,
     ) -> None:
         self.dataset_dir = Path(dataset_dir)
         self.output_dir = Path(output_dir)
@@ -59,7 +103,10 @@ class LinearSVMTrainer:
         self.c = float(c)
         self.class_weight = class_weight
         self.standardize = bool(standardize)
+        self.l2_normalize = bool(l2_normalize)
+        self.ensemble_size = int(ensemble_size)
         self.probability = bool(probability)
+        self.expected_activation_location = str(expected_activation_location)
 
         if not self.dataset_dir.is_dir():
             raise FileNotFoundError("SVM dataset directory does not exist: " f"{self.dataset_dir}")
@@ -79,10 +126,21 @@ class LinearSVMTrainer:
         if self.c <= 0:
             raise ValueError("SVM C must be positive.")
 
+        if self.ensemble_size <= 0:
+            raise ValueError("ensemble_size must be positive.")
+
+        if self.standardize and self.l2_normalize:
+            raise ValueError(
+                "standardize and l2_normalize are mutually exclusive. "
+                "The released SHIFT classifier uses per-sample L2 normalization."
+            )
+
         if not self.probability:
             raise ValueError(
                 "SHIFT requires classifier probabilities, " "so probability must be enabled."
             )
+
+        self.activation_location = self._validate_dataset_metadata()
 
     def run(self) -> dict[str, Any]:
         self.output_dir.mkdir(
@@ -102,9 +160,12 @@ class LinearSVMTrainer:
                 location_results.append(result)
 
         summary = {
-            "classifier_type": ("standardized_linear_svc" if self.standardize else "linear_svc"),
+            "classifier_type": "linear_svc_probability_ensemble",
+            "activation_location": self.activation_location,
+            "feature_normalization": self._feature_normalization_name(),
             "kernel": "linear",
             "probability": self.probability,
+            "ensemble_size": self.ensemble_size,
             "positive_class_label": 1,
             "negative_class_label": 0,
             "step_indices": self.step_indices,
@@ -147,73 +208,79 @@ class LinearSVMTrainer:
             step_index=step_index,
         )
 
-        groups = np.asarray([str(sample["pair_name"]) for sample in samples])
-
         self._validate_pair_groups(
             labels=labels,
             samples=samples,
         )
 
-        splitter = GroupShuffleSplit(
-            n_splits=1,
-            test_size=self.validation_fraction,
-            random_state=self.random_seed,
+        # The released trainer concatenates all positives followed by all
+        # negatives before calling train_test_split. Preserve that ordering
+        # so seeds 42/43 select the same prompt rows.
+        author_order = np.concatenate(
+            [
+                np.flatnonzero(labels == 1),
+                np.flatnonzero(labels == 0),
+            ]
         )
+        features = features[author_order]
+        labels = labels[author_order]
+        samples = [samples[int(index)] for index in author_order]
 
-        train_indices, validation_indices = next(
-            splitter.split(
-                features,
-                labels,
-                groups=groups,
-            )
-        )
+        models: list[Pipeline] = []
+        member_documents: list[dict[str, Any]] = []
 
-        train_features = features[train_indices]
-        train_labels = labels[train_indices]
+        for member_index in range(self.ensemble_size):
+            member_seed = self.random_seed + member_index
 
-        validation_features = features[validation_indices]
-        validation_labels = labels[validation_indices]
-
-        evaluation_model = self._build_model()
-
-        evaluation_model.fit(
-            train_features,
-            train_labels,
-        )
-
-        train_metrics = self._evaluate(
-            model=evaluation_model,
-            features=train_features,
-            labels=train_labels,
-        )
-
-        validation_metrics = self._evaluate(
-            model=evaluation_model,
-            features=validation_features,
-            labels=validation_labels,
-        )
-
-        train_pair_names = sorted(set(groups[train_indices].tolist()))
-
-        validation_pair_names = sorted(set(groups[validation_indices].tolist()))
-
-        overlap = set(train_pair_names) & set(validation_pair_names)
-
-        if overlap:
-            raise RuntimeError(
-                "Pair leakage detected between " f"train and validation: {sorted(overlap)}"
+            train_indices, validation_indices = train_test_split(
+                np.arange(features.shape[0]),
+                test_size=self.validation_fraction,
+                random_state=member_seed,
+                stratify=labels,
+                shuffle=True,
             )
 
-        # Refit the classifier on all available pairs after honest
-        # holdout metrics have been computed.
-        final_model = self._build_model()
+            train_pair_names = sorted(
+                {str(samples[index]["pair_name"]) for index in train_indices}
+            )
+            validation_pair_names = sorted(
+                {str(samples[index]["pair_name"]) for index in validation_indices}
+            )
 
-        final_model.fit(
-            features,
-            labels,
+            model = self._build_model(random_seed=member_seed)
+            model.fit(features[train_indices], labels[train_indices])
+            models.append(model)
+
+            member_documents.append(
+                {
+                    "member_index": member_index,
+                    "random_seed": member_seed,
+                    "train_num_samples": int(len(train_indices)),
+                    "validation_num_samples": int(len(validation_indices)),
+                    "train_pair_names": train_pair_names,
+                    "validation_pair_names": validation_pair_names,
+                    "train": self._evaluate(
+                        model=model,
+                        features=features[train_indices],
+                        labels=labels[train_indices],
+                    ),
+                    "validation": self._evaluate(
+                        model=model,
+                        features=features[validation_indices],
+                        labels=labels[validation_indices],
+                    ),
+                }
+            )
+
+        final_model = ProbabilitySVCEnsemble(models)
+        train_metrics = self._average_metrics(
+            [member["train"] for member in member_documents]
+        )
+        validation_metrics = self._average_metrics(
+            [member["validation"] for member in member_documents]
         )
 
-        svm_normal, svm_normal_metadata = self._extract_svm_normal(final_model)
+        svm_normal, svm_normal_metadata = self._extract_ensemble_svm_normal(models)
 
         block_dir = self.output_dir / f"block_{block_index:02d}"
 
@@ -241,14 +308,19 @@ class LinearSVMTrainer:
             "block_index": block_index,
             "step_index": step_index,
             "feature_dimension": int(features.shape[1]),
+            "activation_location": self.activation_location,
+            "feature_normalization": self._feature_normalization_name(),
+            "ensemble_size": self.ensemble_size,
             "num_samples": int(features.shape[0]),
-            "num_pairs": len(set(groups)),
-            "train_num_samples": int(len(train_indices)),
-            "validation_num_samples": int(len(validation_indices)),
-            "evaluation_model": ("fit_on_train_split"),
-            "saved_model": ("refit_on_full_dataset"),
+            "num_pairs": len({str(sample["pair_name"]) for sample in samples}),
+            "train_num_samples": int(member_documents[0]["train_num_samples"]),
+            "validation_num_samples": int(member_documents[0]["validation_num_samples"]),
+            "split_strategy": "stratified_samples_like_authors_release",
+            "evaluation_model": "mean_of_stratified_split_members",
+            "saved_model": "ensemble_of_stratified_split_models",
             "train": train_metrics,
             "validation": validation_metrics,
+            "members": member_documents,
             "classifier_path": str(classifier_path),
             "svm_normal": {
                 **svm_normal_metadata,
@@ -264,8 +336,16 @@ class LinearSVMTrainer:
         OmegaConf.save(
             config=OmegaConf.create(
                 {
-                    "train_pair_names": (train_pair_names),
-                    "validation_pair_names": (validation_pair_names),
+                    "split_strategy": "stratified_samples_like_authors_release",
+                    "members": [
+                        {
+                            "member_index": member["member_index"],
+                            "random_seed": member["random_seed"],
+                            "train_pair_names": member["train_pair_names"],
+                            "validation_pair_names": member["validation_pair_names"],
+                        }
+                        for member in member_documents
+                    ],
                 }
             ),
             f=split_path,
@@ -284,8 +364,11 @@ class LinearSVMTrainer:
             "validation_probability_gap": (validation_metrics["probability_gap"]),
         }
 
-    def _build_model(self) -> Pipeline:
+    def _build_model(self, random_seed: int) -> Pipeline:
         pipeline_steps: list[tuple[str, Any]] = []
+
+        if self.l2_normalize:
+            pipeline_steps.append(("normalizer", Normalizer(norm="l2")))
 
         if self.standardize:
             pipeline_steps.append(
@@ -303,17 +386,92 @@ class LinearSVMTrainer:
                     C=self.c,
                     class_weight=(self.class_weight),
                     probability=True,
-                    random_state=(self.random_seed),
+                    random_state=int(random_seed),
                 ),
             )
         )
 
         return Pipeline(pipeline_steps)
 
+    def _feature_normalization_name(self) -> str:
+        if self.l2_normalize:
+            return "sample_l2"
+        if self.standardize:
+            return "standard_scaler"
+        return "none"
+
+    def _validate_dataset_metadata(self) -> str:
+        metadata_path = self.dataset_dir / "metadata.yaml"
+
+        if not metadata_path.is_file():
+            raise FileNotFoundError(
+                f"SVM dataset metadata is missing: {metadata_path}. "
+                "Regenerate block-output artifacts before training."
+            )
+
+        document = OmegaConf.load(metadata_path)
+        location = str(document.get("activation_location", "missing"))
+
+        if location != self.expected_activation_location:
+            raise RuntimeError(
+                "Incompatible SVM activation location: "
+                f"expected {self.expected_activation_location!r}, got {location!r}. "
+                "The old attn.to_add_out artifacts cannot be reused."
+            )
+
+        return location
+
     @staticmethod
-    def _extract_svm_normal(
-        model: Pipeline,
+    def _average_metrics(metrics: Sequence[dict[str, Any]]) -> dict[str, Any]:
+        if not metrics:
+            raise ValueError("Cannot average an empty metric collection.")
+
+        result: dict[str, Any] = {}
+
+        for key in metrics[0]:
+            values = [document[key] for document in metrics]
+
+            if key == "confusion_matrix":
+                result[key] = np.sum(np.asarray(values), axis=0).tolist()
+            else:
+                result[key] = float(np.mean(np.asarray(values, dtype=np.float64)))
+
+        return result
+
+    @classmethod
+    def _extract_ensemble_svm_normal(
+        cls,
+        models: Sequence[Pipeline],
     ) -> tuple[torch.Tensor, dict[str, Any]]:
+        raw_normals = [cls._extract_raw_svm_normal(model) for model in models]
+        mean_normal = np.mean(np.stack(raw_normals, axis=0), axis=0)
+        raw_norm = float(np.linalg.norm(mean_normal))
+
+        if raw_norm <= 1.0e-12:
+            raise RuntimeError("The mean ensemble SVM normal has zero length.")
+
+        normal_tensor = torch.from_numpy((mean_normal / raw_norm).astype(np.float32))
+
+        return normal_tensor, {
+            "shape": list(normal_tensor.shape),
+            "dtype": str(normal_tensor.dtype),
+            "space": (
+                "l2_normalized_activation_space"
+                if "normalizer" in models[0].named_steps
+                else "raw_activation_space"
+            ),
+            "ensemble_reduction": "mean_coefficients_then_l2_normalize",
+            "ensemble_size": len(models),
+            "standardization_compensated": "scaler" in models[0].named_steps,
+            "class_direction": "class_0_to_class_1",
+            "raw_l2_norm": raw_norm,
+            "normalized_l2_norm": float(normal_tensor.norm().item()),
+        }
+
+    @staticmethod
+    def _extract_raw_svm_normal(
+        model: Pipeline,
+    ) -> np.ndarray:
         """
         Extract the normalized linear-SVM normal in the original
         activation coordinate system.
@@ -378,17 +536,7 @@ class LinearSVMTrainer:
 
         normal = normal / raw_norm
 
-        normal_tensor = torch.from_numpy(normal.astype(np.float32))
-
-        return normal_tensor, {
-            "shape": list(normal_tensor.shape),
-            "dtype": str(normal_tensor.dtype),
-            "space": "raw_activation_space",
-            "standardization_compensated": standardized,
-            "class_direction": "class_0_to_class_1",
-            "raw_l2_norm": raw_norm,
-            "normalized_l2_norm": float(normal_tensor.norm().item()),
-        }
+        return normal
 
     def _load_dataset(
         self,
@@ -536,7 +684,7 @@ class LinearSVMTrainer:
 
     @staticmethod
     def _evaluate(
-        model: Pipeline,
+        model: Any,
         features: np.ndarray,
         labels: np.ndarray,
     ) -> dict[str, Any]:
