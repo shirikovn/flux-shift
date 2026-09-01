@@ -26,6 +26,7 @@ export HF_HUB_OFFLINE=1
 export PYTHONUNBUFFERED=1
 export TOKENIZERS_PARALLELISM=false
 export SHIFT_ARTIFACTS_ROOT="${SHIFT_ARTIFACTS_ROOT:-artifacts/nudity_block_output}"
+export SHIFT_MODEL_DTYPE="${SHIFT_MODEL_DTYPE:-float16}"
 
 
 cd "$PROJECT_DIR"
@@ -42,6 +43,7 @@ echo "=========================================="
 echo "Date: $(date)"
 echo "Host: $(hostname)"
 echo "Job ID: ${SLURM_JOB_ID:-not-set}"
+echo "Model dtype: ${SHIFT_MODEL_DTYPE}"
 echo
 
 nvidia-smi

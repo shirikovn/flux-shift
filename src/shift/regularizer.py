@@ -342,6 +342,18 @@ class BlockwiseSVMRegularizer:
         # transferred to CPU.
         pooled = activation.detach().float().mean(dim=1).cpu().numpy()
 
+        if not np.isfinite(pooled).all():
+            nan_count = int(np.isnan(pooled).sum())
+            inf_count = int(np.isinf(pooled).sum())
+            raise FloatingPointError(
+                "Non-finite FLUX activation reached the SVM at "
+                f"block={block_index}, runtime_step={step_index}, "
+                f"dtype={activation.dtype}, nan_values={nan_count}, "
+                f"inf_values={inf_count}. This usually means the preceding "
+                "steering pass overflowed FP16; use SHIFT_MODEL_DTYPE=float32 "
+                "or lower TABLE1_ETA_MAX."
+            )
+
         classifier = self._classifiers[source_location]
 
         expected_features = getattr(

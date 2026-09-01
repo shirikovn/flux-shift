@@ -53,6 +53,8 @@ export TABLE1_STRENGTHS="${TABLE1_STRENGTHS:-45}"
 export TABLE1_I2P_CSV="${TABLE1_I2P_CSV:-data/i2p.csv}"
 export TABLE1_OUTPUT_ROOT="${TABLE1_OUTPUT_ROOT:-outputs/i2p_block_output}"
 export SHIFT_ARTIFACTS_ROOT="${SHIFT_ARTIFACTS_ROOT:-artifacts/nudity_block_output}"
+export SHIFT_MODEL_DTYPE="${SHIFT_MODEL_DTYPE:-float16}"
+export TABLE1_ETA_MAX="${TABLE1_ETA_MAX:-20}"
 
 
 cd "$PROJECT_DIR"
@@ -78,6 +80,8 @@ echo "Strengths: ${TABLE1_STRENGTHS}"
 echo "Dataset: ${TABLE1_I2P_CSV}"
 echo "Output: ${TABLE1_OUTPUT_ROOT}"
 echo "Artifacts: ${SHIFT_ARTIFACTS_ROOT}"
+echo "Model dtype: ${SHIFT_MODEL_DTYPE}"
+echo "Classifier eta cap: ${TABLE1_ETA_MAX}"
 echo
 
 

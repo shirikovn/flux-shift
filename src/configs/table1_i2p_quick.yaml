@@ -93,7 +93,7 @@ shift:
   pooled_gamma: 6.0
 
   # --cls_min in the released nudity launcher.
-  eta_max: 20.0
+  eta_max: ${oc.env:TABLE1_ETA_MAX,20.0}
 
 
 # =========================================================
