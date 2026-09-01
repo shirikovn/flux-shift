@@ -1,0 +1,4 @@
+_target_: src.datasets.nudity_pairs.NudityPromptPairDataset
+
+concept: nudity
+max_pairs: null

@@ -1,0 +1,2 @@
+datasets>=2.19
+nudenet==3.4.2

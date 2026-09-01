@@ -1,0 +1,182 @@
+defaults:
+  - model: flux_schnell_v100
+  - generation: schnell_512
+  - intervention: steer_full_shift
+  - pipeline: steering_experiment
+  - _self_
+
+seed: 0
+device: cuda
+
+run_dir: ${hydra:runtime.output_dir}
+
+
+# =========================================================
+# SHIFT configuration
+# =========================================================
+
+shift:
+  artifacts_root: artifacts/nudity
+
+  # Mean token-wise positive-minus-negative direction.
+  vector_type: tokenwise_difference
+
+  # One step-0 vector is reused at every diffusion step.
+  vector_timing:
+    mode: shared
+    source_step: 0
+    steps:
+      - 0
+      - 1
+      - 2
+      - 3
+
+  # Keep the same classifier setup that already worked
+  # in the Table-3 reproduction.
+  classifier_timing:
+    mode: per_step
+    source_step: 0
+    steps:
+      - 0
+      - 1
+      - 2
+      - 3
+
+  artifact_blocks:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
+    - 11
+    - 12
+    - 13
+    - 14
+    - 15
+    - 16
+    - 17
+    - 18
+
+  blocks:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
+    - 11
+    - 12
+    - 13
+    - 14
+    - 15
+    - 16
+    - 17
+    - 18
+
+  steps:
+    - 0
+    - 1
+    - 2
+    - 3
+
+  pooled_gamma: 6.0
+
+  # This value is not specified sufficiently in the paper.
+  # We retain the value already used by the repository.
+  eta_max: 4.0
+
+
+# =========================================================
+# I2P benchmark
+# =========================================================
+
+benchmark:
+  data_path: ${oc.env:TABLE1_I2P_CSV,data/i2p.csv}
+
+  # 0 means use the entire dataset.
+  sample_size: ${oc.env:TABLE1_SAMPLE_SIZE,512}
+
+  # IMPORTANT:
+  # keep this fixed when expanding 512 -> 1024 -> 4703.
+  # The smaller experiment will then be a prefix of
+  # the larger experiment and can be resumed.
+  sample_seed: ${oc.env:TABLE1_SAMPLE_SEED,2026}
+
+  worker_id: ${oc.env:SLURM_ARRAY_TASK_ID,0}
+  num_workers: ${oc.env:TABLE1_NUM_WORKERS,4}
+
+  output_root: >-
+    ${oc.env:TABLE1_OUTPUT_ROOT,outputs/table1_i2p_quick}
+
+  expected_population: 4703
+
+
+# =========================================================
+# Generation experiment
+# =========================================================
+
+experiment:
+  # The benchmark script overrides this per I2P case.
+  output_dir: ${run_dir}/benchmark
+
+  resume:
+    mode: resume
+    verify_images: true
+    repair_incomplete: true
+
+  # The script can replace this using TABLE1_STRENGTHS.
+  strengths:
+    - 250.0
+    - 500.0
+
+  schedules:
+    - name: full_shift
+
+      blocks: ${shift.blocks}
+      steps: ${shift.steps}
+
+      strengths:
+        - 250.0
+        - 500.0
+
+      use_classifier: true
+      use_pooled: true
+
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: raw
+
+  # Filled dynamically by table1_i2p.py.
+  cases: []
+
+
+# =========================================================
+# Paper-faithful intervention difference
+# =========================================================
+
+intervention:
+  controller:
+    # The paper specifies a + alpha*v intervention and
+    # does not describe restoring the original token norm.
+    restore_token_norm: false
+
+
+hydra:
+  run:
+    dir: >-
+      ${benchmark.output_root}/_workers/worker_${benchmark.worker_id}
+
+  job:
+    chdir: false
+
+  output_subdir: .hydra
