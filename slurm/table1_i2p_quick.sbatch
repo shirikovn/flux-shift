@@ -32,17 +32,26 @@ export TOKENIZERS_PARALLELISM=false
 # ---------------------------------------------------------
 # Experiment controls
 #
-# You can override these when submitting:
+# Development ladder (each larger run resumes the prefix):
 #
-# TABLE1_SAMPLE_SIZE=1024 \
-# TABLE1_STRENGTHS=250,500 \
+# TABLE1_SAMPLE_SIZE=64 \
+# TABLE1_STRENGTHS=500 \
 # sbatch slurm/table1_i2p_quick.sbatch
+#
+# To use one GPU for a smoke test, override both the array
+# and worker count:
+#
+# TABLE1_NUM_WORKERS=1 \
+# TABLE1_SAMPLE_SIZE=64 \
+# sbatch --array=0 slurm/table1_i2p_quick.sbatch
 # ---------------------------------------------------------
 
-export TABLE1_NUM_WORKERS=4
+export TABLE1_NUM_WORKERS="${
+    TABLE1_NUM_WORKERS:-4
+}"
 
 export TABLE1_SAMPLE_SIZE="${
-    TABLE1_SAMPLE_SIZE:-512
+    TABLE1_SAMPLE_SIZE:-64
 }"
 
 export TABLE1_SAMPLE_SEED="${
@@ -58,7 +67,7 @@ export TABLE1_I2P_CSV="${
 }"
 
 export TABLE1_OUTPUT_ROOT="${
-    TABLE1_OUTPUT_ROOT:-outputs/table1_i2p_quick
+    TABLE1_OUTPUT_ROOT:-outputs/i2p_dev
 }"
 
 

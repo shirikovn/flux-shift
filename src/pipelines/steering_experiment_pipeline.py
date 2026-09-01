@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,27 @@ from src.shift.manager import (
 from src.utils.run_output_store import (
     RunOutputStore,
 )
+from src.utils.hashing import sha256_file_set
+
+
+@lru_cache(maxsize=1)
+def shift_implementation_fingerprint() -> str:
+    """Fingerprint code that can change intervention output."""
+    source_root = Path(__file__).resolve().parents[1]
+    implementation_files = [
+        Path(__file__).resolve(),
+        *sorted(
+            (source_root / "shift").glob("*.py")
+        ),
+    ]
+
+    return sha256_file_set(
+        (
+            str(path.relative_to(source_root)),
+            path,
+        )
+        for path in implementation_files
+    )
 
 
 class SteeringExperimentPipeline:
@@ -80,6 +102,24 @@ class SteeringExperimentPipeline:
         self.vector_configuration = controller.vector_configuration()
 
         self.classifier_configuration = controller.classifier_configuration()
+
+        self.controller_configuration = (
+            controller.algorithm_configuration()
+        )
+
+        pooled_controller = (
+            self.intervention_manager.pooled_controller
+        )
+
+        self.pooled_controller_configuration = (
+            pooled_controller.configuration()
+            if pooled_controller is not None
+            else None
+        )
+
+        self.implementation_fingerprint = (
+            shift_implementation_fingerprint()
+        )
 
         self.output_store = RunOutputStore(
             output_dir=self.output_dir,
@@ -345,6 +385,14 @@ class SteeringExperimentPipeline:
 
         specification_hash = RunOutputStore.hash_specification(specification)
 
+        variant_id = (
+            "baseline"
+            if is_baseline
+            else RunOutputStore.hash_specification(
+                specification["intervention"]
+            )[:12]
+        )
+
         run_id = specification_hash[:16]
 
         filename = f"{self._sanitize(case_name)}" f"__{self._sanitize(suffix)}" f"__{run_id}.png"
@@ -473,6 +521,7 @@ class SteeringExperimentPipeline:
             "seed": self.seed,
             "operation": operation,
             "base_strength": strength,
+            "variant_id": variant_id,
             "use_classifier": use_classifier,
             "schedule": schedule_name,
             "blocks": blocks,
@@ -515,30 +564,57 @@ class SteeringExperimentPipeline:
         pooled_strength: float,
         pooled_similarity_mode: str,
     ) -> dict[str, Any]:
-        return {
-            "schema_version": 1,
+        baseline_specification = {
+            "schema_version": 2,
+            "run_kind": "baseline",
             "model": self.model_identity,
             "generation": self.generation_dict,
             "seed": self.seed,
             "case": {
                 "name": case_name,
                 "prompt": prompt,
-                "operation": operation,
             },
-            "steering": {
-                "schedule": schedule_name,
-                "strength": strength,
-                "blocks": blocks,
-                "steps": steps,
-                "classifier": {
-                    "enabled": use_classifier,
-                    "configuration": (self.classifier_configuration if use_classifier else None),
-                },
-                "vector": self.vector_configuration,
-                "pooled": {
-                    "enabled": use_pooled,
-                    "strength": pooled_strength,
-                    "similarity_mode": (pooled_similarity_mode),
+        }
+
+        if schedule_name == "baseline":
+            return baseline_specification
+
+        return {
+            "schema_version": 2,
+            "run_kind": "intervention",
+            "baseline": baseline_specification,
+            "intervention": {
+                "implementation_fingerprint": (
+                    self.implementation_fingerprint
+                ),
+                "operation": operation,
+                "steering": {
+                    "schedule": schedule_name,
+                    "strength": strength,
+                    "blocks": blocks,
+                    "steps": steps,
+                    "controller": self.controller_configuration,
+                    "classifier": {
+                        "enabled": use_classifier,
+                        "configuration": (
+                            self.classifier_configuration
+                            if use_classifier
+                            else None
+                        ),
+                    },
+                    "vector": self.vector_configuration,
+                    "pooled": {
+                        "enabled": use_pooled,
+                        "strength": pooled_strength,
+                        "similarity_mode": (
+                            pooled_similarity_mode
+                        ),
+                        "configuration": (
+                            self.pooled_controller_configuration
+                            if use_pooled
+                            else None
+                        ),
+                    },
                 },
             },
         }
@@ -557,6 +633,13 @@ class SteeringExperimentPipeline:
             "generation": self.generation_dict,
             "vector": self.vector_configuration,
             "classifier": self.classifier_configuration,
+            "controller": self.controller_configuration,
+            "pooled_controller": (
+                self.pooled_controller_configuration
+            ),
+            "implementation_fingerprint": (
+                self.implementation_fingerprint
+            ),
             "default_strengths": (self.strengths),
             "cases": self.cases,
             "schedules": self.schedules,

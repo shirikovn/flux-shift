@@ -135,6 +135,30 @@ class TokenWiseSteeringController:
 
         return self.regularizer.configuration()
 
+    def algorithm_configuration(
+        self,
+    ) -> dict[str, Any]:
+        """
+        Return static settings that affect steering output.
+
+        Dynamic settings such as strength, operation and active
+        locations are recorded by the experiment pipeline for each
+        individual run.
+        """
+        return {
+            "type": self.__class__.__name__,
+            "vector_type": self.vector_type,
+            "timing_mode": self.timing_mode,
+            "source_step": (
+                self.source_step
+                if self.timing_mode == "shared"
+                else None
+            ),
+            "validate_runtime": self.validate_runtime,
+            "restore_token_norm": self.restore_token_norm,
+            "restore_eps": self.restore_eps,
+        }
+
     def configure(
         self,
         operation: str,

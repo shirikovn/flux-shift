@@ -6,6 +6,8 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
+from src.utils.hashing import sha256_file_set
+
 
 class PooledSteeringController:
     """
@@ -56,6 +58,16 @@ class PooledSteeringController:
         self._cpu_vector = self._load_tensor(self.vector_path)
 
         self._cpu_target_embedding = self._load_tensor(self.target_embedding_path)
+
+        self.artifact_fingerprint = sha256_file_set(
+            [
+                ("vector", self.vector_path),
+                (
+                    "target_embedding",
+                    self.target_embedding_path,
+                ),
+            ]
+        )
 
         if self._cpu_vector.ndim != 1:
             raise RuntimeError(
@@ -306,11 +318,24 @@ class PooledSteeringController:
             "last_record": (self.last_record),
         }
 
-    def summary(self) -> dict[str, Any]:
+    def configuration(self) -> dict[str, Any]:
+        """Return static settings that affect pooled steering."""
         return {
             "type": self.__class__.__name__,
             "vector_path": str(self.vector_path),
-            "target_embedding_path": str(self.target_embedding_path),
+            "target_embedding_path": str(
+                self.target_embedding_path
+            ),
+            "normalize_vector": self.normalize_vector,
+            "eps": self.eps,
+            "artifact_fingerprint": (
+                self.artifact_fingerprint
+            ),
+        }
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            **self.configuration(),
             "vector_shape": list(self._cpu_vector.shape),
             "vector_norm": float(self._cpu_vector.norm().item()),
             "target_embedding_norm": float(self._cpu_target_embedding.norm().item()),

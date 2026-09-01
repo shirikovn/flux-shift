@@ -8,6 +8,8 @@ import joblib
 import numpy as np
 import torch
 
+from src.utils.hashing import sha256_file_set
+
 ClassifierLocation = tuple[int, int]
 
 
@@ -112,6 +114,17 @@ class BlockwiseSVMRegularizer:
                 )
 
                 self._load_classifier(location)
+
+        self.artifact_fingerprint = sha256_file_set(
+            (
+                f"block={block},step={step}",
+                path,
+            )
+            for (
+                block,
+                step,
+            ), path in self._classifier_paths.items()
+        )
 
     def _load_classifier(
         self,
@@ -356,6 +369,9 @@ class BlockwiseSVMRegularizer:
             "step_indices": (list(self.step_indices) if self.timing_mode == "per_step" else None),
             "eps": self.eps,
             "eta_max": self.eta_max,
+            "artifact_fingerprint": (
+                self.artifact_fingerprint
+            ),
         }
 
     def summary(self) -> dict[str, Any]:

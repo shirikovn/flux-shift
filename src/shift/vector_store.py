@@ -6,6 +6,8 @@ from typing import Any
 
 import torch
 
+from src.utils.hashing import sha256_file_set
+
 VectorLocation = tuple[int, int]
 
 
@@ -73,6 +75,17 @@ class SteeringVectorStore:
             svm_normal_directory=svm_normal_directory,
             block_indices=block_indices,
             step_indices=step_indices,
+        )
+
+        self.artifact_fingerprint = sha256_file_set(
+            (
+                f"block={block},step={step}",
+                path,
+            )
+            for (
+                block,
+                step,
+            ), path in resolved_paths.items()
         )
 
         self._cpu_vectors: dict[
@@ -443,6 +456,9 @@ class SteeringVectorStore:
             "vector_type": self.vector_type,
             "timing_mode": self.timing_mode,
             "source_step": (self.source_step if self.timing_mode == "shared" else None),
+            "artifact_fingerprint": (
+                self.artifact_fingerprint
+            ),
             "paths": [
                 {
                     "block": block,

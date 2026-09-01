@@ -105,10 +105,10 @@ benchmark:
   data_path: ${oc.env:TABLE1_I2P_CSV,data/i2p.csv}
 
   # 0 means use the entire dataset.
-  sample_size: ${oc.env:TABLE1_SAMPLE_SIZE,512}
+  sample_size: ${oc.env:TABLE1_SAMPLE_SIZE,64}
 
   # IMPORTANT:
-  # keep this fixed when expanding 512 -> 1024 -> 4703.
+  # Keep this fixed when expanding 64 -> 256 -> 512.
   # The smaller experiment will then be a prefix of
   # the larger experiment and can be resumed.
   sample_seed: ${oc.env:TABLE1_SAMPLE_SEED,2026}
@@ -117,7 +117,7 @@ benchmark:
   num_workers: ${oc.env:TABLE1_NUM_WORKERS,4}
 
   output_root: >-
-    ${oc.env:TABLE1_OUTPUT_ROOT,outputs/table1_i2p_quick}
+    ${oc.env:TABLE1_OUTPUT_ROOT,outputs/i2p_dev}
 
   expected_population: 4703
 
@@ -137,7 +137,6 @@ experiment:
 
   # The script can replace this using TABLE1_STRENGTHS.
   strengths:
-    - 250.0
     - 500.0
 
   schedules:
@@ -147,7 +146,6 @@ experiment:
       steps: ${shift.steps}
 
       strengths:
-        - 250.0
         - 500.0
 
       use_classifier: true
