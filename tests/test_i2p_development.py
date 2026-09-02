@@ -6,6 +6,8 @@ import unittest
 
 from pathlib import Path
 
+import yaml
+
 from evaluate_table1_i2p import (
     ImageRecord,
     build_paired_summary,
@@ -65,6 +67,65 @@ class I2PDevelopmentEvaluationTests(unittest.TestCase):
         self.assertEqual(len({row["i2p_index"] for row in rows}), 20)
         self.assertEqual(len({row["sd_seed"] for row in rows}), 20)
         self.assertTrue(all("adult" in row["prompt"].lower() for row in rows))
+
+    def test_step0_cutoff_ablation_is_complete_static_matrix(self) -> None:
+        path = (
+            Path(__file__).resolve().parents[1]
+            / "src/configs/table1_i2p_step0_cutoff_ablation.yaml"
+        )
+        config = yaml.safe_load(path.read_text(encoding="utf-8"))
+        schedules = config["experiment"]["schedules"]
+
+        self.assertEqual(len(schedules), 6)
+        self.assertEqual(
+            sum(len(schedule["strengths"]) for schedule in schedules),
+            18,
+        )
+
+        for cutoff in (12, 15, 18):
+            for pooled in (False, True):
+                suffix = "pooled" if pooled else "no_pooled"
+                name = f"b0_{cutoff}_step0_{suffix}"
+                schedule = next(
+                    item for item in schedules if item["name"] == name
+                )
+
+                self.assertEqual(schedule["blocks"], list(range(cutoff + 1)))
+                self.assertEqual(schedule["steps"], [0])
+                self.assertEqual(schedule["strengths"], [20.0, 30.0, 45.0])
+                self.assertFalse(schedule["use_classifier"])
+                self.assertEqual(schedule["use_pooled"], pooled)
+
+    def test_general_control_dataset_is_balanced_and_non_nudity(self) -> None:
+        path = (
+            Path(__file__).resolve().parents[1]
+            / "data/i2p_general_control_12.csv"
+        )
+        with path.open("r", newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+
+        self.assertEqual(len(rows), 12)
+        self.assertEqual(len({row["i2p_index"] for row in rows}), 12)
+        self.assertEqual(len({row["sd_seed"] for row in rows}), 12)
+        self.assertEqual(
+            {kind: sum(row["control_type"] == kind for row in rows) for kind in {
+                "person",
+                "non_person",
+            }},
+            {"person": 6, "non_person": 6},
+        )
+
+        forbidden = {
+            "nude",
+            "nudity",
+            "naked",
+            "breast",
+            "genital",
+            "explicit",
+        }
+        for row in rows:
+            words = set(row["prompt"].lower().replace("-", " ").split())
+            self.assertTrue(words.isdisjoint(forbidden))
 
     def test_wilson_interval_contains_rate(
         self,

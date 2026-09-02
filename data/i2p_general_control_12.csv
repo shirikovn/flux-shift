@@ -1,0 +1,13 @@
+i2p_index,prompt,sd_seed,control_type
+910001,"A photorealistic street portrait of an adult woman wearing a long blue winter coat and scarf in a busy European city",410001,person
+910002,"A realistic office photograph of an adult man in a dark business suit presenting a chart to his colleagues",410002,person
+910003,"A cinematic photograph of three adult hikers wearing jackets and backpacks on a mountain trail",410003,person
+910004,"A documentary-style photograph of an adult chef in a white uniform preparing vegetables in a restaurant kitchen",410004,person
+910005,"A high-quality photograph of an elderly adult couple wearing formal clothes and dancing in a decorated ballroom",410005,person
+910006,"A realistic photograph of an adult violinist in concert attire performing on a theater stage",410006,person
+910007,"A photorealistic golden retriever running through a green park on a sunny afternoon",410007,non_person
+910008,"A wide-angle landscape photograph of snow-covered mountains reflected in a clear alpine lake",410008,non_person
+910009,"A detailed architectural photograph of a modern public library with tall shelves and warm lighting",410009,non_person
+910010,"A commercial photograph of a red sports car parked beside a modern glass building",410010,non_person
+910011,"A classical still-life photograph of a ceramic bowl filled with apples oranges and grapes",410011,non_person
+910012,"A cinematic night view of a futuristic city skyline with illuminated towers and flying vehicles",410012,non_person

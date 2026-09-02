@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 
 EXPECTED_POPULATION = 4703
+DEFAULT_CLIP_MODEL_ID = "openai/clip-vit-large-patch14"
 
 # The paper does not document its exact NudeNet-to-group mapping.
 GROUPS = {
@@ -96,6 +97,20 @@ def parse_args() -> argparse.Namespace:
         help="Used only for secondary Table-1-style extrapolated counts.",
     )
     parser.add_argument("--allow-incomplete", action="store_true")
+    parser.add_argument(
+        "--compute-clip",
+        action="store_true",
+        help=(
+            "Also compute prompt-image CLIP and matched-baseline "
+            "image CLIP similarities."
+        ),
+    )
+    parser.add_argument(
+        "--clip-model-id",
+        default=DEFAULT_CLIP_MODEL_ID,
+    )
+    parser.add_argument("--clip-device", default="cuda")
+    parser.add_argument("--clip-batch-size", type=int, default=16)
     return parser.parse_args()
 
 
@@ -470,6 +485,138 @@ def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) -> 
         writer.writerows(rows)
 
 
+def record_identity(record: ImageRecord) -> tuple[str, int, str, float, str]:
+    return (
+        record.case_name,
+        record.seed,
+        record.schedule,
+        record.strength,
+        record.variant_id,
+    )
+
+
+def evaluate_clip(
+    records: list[ImageRecord],
+    model_id: str,
+    device: str,
+    batch_size: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    import torch
+    from PIL import Image
+    from transformers import CLIPModel, CLIPProcessor
+
+    if batch_size <= 0:
+        raise ValueError("--clip-batch-size must be positive")
+
+    target_device = torch.device(device)
+    print(f"\nLoading CLIP {model_id} on {target_device}...")
+    model = CLIPModel.from_pretrained(model_id).to(target_device).eval()
+    processor = CLIPProcessor.from_pretrained(model_id)
+
+    image_features: dict[tuple[str, int, str, float, str], Any] = {}
+    prompt_scores: dict[tuple[str, int, str, float, str], float] = {}
+
+    with torch.inference_mode():
+        for start in range(0, len(records), batch_size):
+            batch = records[start : start + batch_size]
+            images = []
+            try:
+                for record in batch:
+                    with Image.open(record.path) as image:
+                        images.append(image.convert("RGB"))
+
+                inputs = processor(
+                    text=[record.prompt for record in batch],
+                    images=images,
+                    return_tensors="pt",
+                    padding=True,
+                )
+                inputs = {
+                    key: value.to(target_device)
+                    for key, value in inputs.items()
+                }
+                outputs = model(**inputs)
+                normalized_images = outputs.image_embeds / outputs.image_embeds.norm(
+                    dim=-1,
+                    keepdim=True,
+                )
+                normalized_text = outputs.text_embeds / outputs.text_embeds.norm(
+                    dim=-1,
+                    keepdim=True,
+                )
+                similarities = (normalized_images * normalized_text).sum(dim=-1)
+
+                for index, record in enumerate(batch):
+                    identity = record_identity(record)
+                    image_features[identity] = normalized_images[index].detach().cpu()
+                    prompt_scores[identity] = float(similarities[index].item() * 100.0)
+            finally:
+                for image in images:
+                    image.close()
+
+    baseline_features = {
+        record.pair_key: image_features[record_identity(record)]
+        for record in records
+        if record.schedule == "baseline"
+    }
+    if not baseline_features:
+        raise RuntimeError("Cannot compute paired CLIP metrics without baselines.")
+
+    per_image_rows: list[dict[str, Any]] = []
+    grouped_rows: defaultdict[GroupKey, list[dict[str, Any]]] = defaultdict(list)
+
+    for record in records:
+        baseline_feature = baseline_features.get(record.pair_key)
+        if baseline_feature is None:
+            raise RuntimeError(f"No CLIP baseline for {record.pair_key}.")
+        feature = image_features[record_identity(record)]
+        image_similarity = float((feature * baseline_feature).sum().item())
+        row = {
+            "case_name": record.case_name,
+            "seed": record.seed,
+            "prompt": record.prompt,
+            "schedule": record.schedule,
+            "strength": record.strength,
+            "variant_id": record.variant_id,
+            "prompt_clip": prompt_scores[record_identity(record)],
+            "image_clip_to_baseline": image_similarity,
+            "path": str(record.path),
+        }
+        per_image_rows.append(row)
+        key = (
+            BASELINE_KEY
+            if record.schedule == "baseline"
+            else (record.schedule, record.strength, record.variant_id)
+        )
+        grouped_rows[key].append(row)
+
+    baseline_prompt_clip = statistics.fmean(
+        row["prompt_clip"] for row in grouped_rows[BASELINE_KEY]
+    )
+    summary_rows: list[dict[str, Any]] = []
+    for key in sorted(grouped_rows, key=group_sort_key):
+        schedule, strength, variant_id = key
+        group = grouped_rows[key]
+        mean_prompt_clip = statistics.fmean(row["prompt_clip"] for row in group)
+        summary_rows.append(
+            {
+                "schedule": schedule,
+                "strength": strength,
+                "variant_id": variant_id,
+                "n_images": len(group),
+                "mean_prompt_clip": mean_prompt_clip,
+                "delta_prompt_clip_from_baseline": (
+                    mean_prompt_clip - baseline_prompt_clip
+                ),
+                "mean_image_clip_to_baseline": statistics.fmean(
+                    row["image_clip_to_baseline"] for row in group
+                ),
+            }
+        )
+
+    return summary_rows, per_image_rows
+
+
 def format_rate(value: float | None) -> str:
     return "n/a" if value is None else f"{100.0 * value:.1f}%"
 
@@ -531,9 +678,12 @@ def main() -> None:
         raise ValueError("--threshold must be in [0, 1]")
     if args.population <= 0:
         raise ValueError("--population must be positive")
+    if args.clip_batch_size <= 0:
+        raise ValueError("--clip-batch-size must be positive")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    groups = group_records(load_records(args.root))
+    records = load_records(args.root)
+    groups = group_records(records)
     validate_groups(groups, args.allow_incomplete)
 
     from nudenet import NudeDetector
@@ -640,6 +790,30 @@ def main() -> None:
     print(f"Group summary: {outputs['summary']}")
     print(f"Paired summary: {outputs['paired_summary']}")
     print(f"Per-image results: {outputs['per_image']}")
+
+    if args.compute_clip:
+        clip_summary_rows, clip_image_rows = evaluate_clip(
+            records=records,
+            model_id=str(args.clip_model_id),
+            device=str(args.clip_device),
+            batch_size=int(args.clip_batch_size),
+        )
+        clip_outputs = {
+            "summary": args.output_dir / "clip_summary.csv",
+            "per_image": args.output_dir / "clip_per_image.csv",
+        }
+        write_csv(
+            clip_outputs["summary"],
+            list(clip_summary_rows[0]),
+            clip_summary_rows,
+        )
+        write_csv(
+            clip_outputs["per_image"],
+            list(clip_image_rows[0]),
+            clip_image_rows,
+        )
+        print(f"CLIP summary: {clip_outputs['summary']}")
+        print(f"CLIP per-image results: {clip_outputs['per_image']}")
 
 
 if __name__ == "__main__":
