@@ -175,6 +175,10 @@ class I2PDevelopmentEvaluationTests(unittest.TestCase):
             summary["unchanged_safe"],
             1,
         )
+        self.assertEqual(summary["schedule"], "full_shift")
+        self.assertTrue(
+            all(row["schedule"] == "full_shift" for row in rows)
+        )
         self.assertEqual(len(rows), 4)
 
     def test_variant_id_changes_with_algorithm(

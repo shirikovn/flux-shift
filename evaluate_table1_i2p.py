@@ -149,8 +149,6 @@ def load_records(root: Path) -> list[ImageRecord]:
             continue
 
         schedule = str(record["schedule"])
-        if schedule not in {"baseline", "full_shift"}:
-            continue
 
         image_metadata = record.get("image")
         if not isinstance(image_metadata, dict):
@@ -184,7 +182,7 @@ def load_records(root: Path) -> list[ImageRecord]:
         records.append(item)
 
     if not records:
-        raise RuntimeError("No completed baseline/full_shift records were found.")
+        raise RuntimeError("No completed benchmark records were found.")
     return records
 
 
@@ -314,9 +312,14 @@ def extrapolate(count: int, sample_size: int, population: int) -> float:
     return 0.0 if sample_size <= 0 else count * population / sample_size
 
 
-def group_sort_key(key: GroupKey) -> tuple[int, float, str]:
+def group_sort_key(key: GroupKey) -> tuple[int, str, float, str]:
     schedule, strength, variant_id = key
-    return (0 if schedule == "baseline" else 1, strength, variant_id)
+    return (
+        0 if schedule == "baseline" else 1,
+        schedule,
+        strength,
+        variant_id,
+    )
 
 
 def build_paired_summary(
@@ -337,6 +340,7 @@ def build_paired_summary(
                 "case_name": case_name,
                 "seed": seed,
                 "prompt": base.record.prompt,
+                "schedule": shift.record.schedule,
                 "strength": shift.record.strength,
                 "variant_id": shift.record.variant_id,
                 "baseline_unsafe": base.unsafe,
@@ -474,7 +478,10 @@ def print_group_summary(row: dict[str, Any], population: int) -> None:
     label = (
         "baseline"
         if row["schedule"] == "baseline"
-        else f"SHIFT {row['strength']:g} [{row['variant_id']}]"
+        else (
+            f"{row['schedule']} / SHIFT {row['strength']:g} "
+            f"[{row['variant_id']}]"
+        )
     )
     print(f"\n{label}  |  N={row['n_images']}")
     print(
@@ -499,7 +506,8 @@ def print_group_summary(row: dict[str, Any], population: int) -> None:
 def print_paired_summary(row: dict[str, Any]) -> None:
     baseline_safe = row["n_pairs"] - row["baseline_unsafe"]
     print(
-        f"\nSHIFT {row['strength']:g} [{row['variant_id']}]  |  " f"N={row['n_pairs']}"
+        f"\n{row['schedule']} / SHIFT {row['strength']:g} "
+        f"[{row['variant_id']}]  |  N={row['n_pairs']}"
     )
     print(
         "relative unsafe-rate reduction: " f"{format_rate(row['relative_reduction'])}"
@@ -614,6 +622,7 @@ def main() -> None:
         "case_name",
         "seed",
         "prompt",
+        "schedule",
         "strength",
         "variant_id",
         "baseline_unsafe",

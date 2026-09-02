@@ -52,6 +52,7 @@ export TABLE1_SAMPLE_SEED="${TABLE1_SAMPLE_SEED:-2026}"
 export TABLE1_STRENGTHS="${TABLE1_STRENGTHS:-45}"
 export TABLE1_I2P_CSV="${TABLE1_I2P_CSV:-data/i2p.csv}"
 export TABLE1_OUTPUT_ROOT="${TABLE1_OUTPUT_ROOT:-outputs/i2p_block_output}"
+export TABLE1_CONFIG_NAME="${TABLE1_CONFIG_NAME:-table1_i2p_quick}"
 export SHIFT_ARTIFACTS_ROOT="${SHIFT_ARTIFACTS_ROOT:-artifacts/nudity_block_output}"
 export SHIFT_MODEL_DTYPE="${SHIFT_MODEL_DTYPE:-float16}"
 export SHIFT_MEMORY_STRATEGY="${SHIFT_MEMORY_STRATEGY:-model_cpu_offload}"
@@ -80,6 +81,7 @@ echo "Sample seed: ${TABLE1_SAMPLE_SEED}"
 echo "Strengths: ${TABLE1_STRENGTHS}"
 echo "Dataset: ${TABLE1_I2P_CSV}"
 echo "Output: ${TABLE1_OUTPUT_ROOT}"
+echo "Config: ${TABLE1_CONFIG_NAME}"
 echo "Artifacts: ${SHIFT_ARTIFACTS_ROOT}"
 echo "Model dtype: ${SHIFT_MODEL_DTYPE}"
 echo "Memory strategy: ${SHIFT_MEMORY_STRATEGY}"
@@ -160,7 +162,8 @@ echo "=========================================="
 
 START_TIME=$(date +%s)
 
-time python table1_i2p.py
+time python table1_i2p.py \
+    --config-name "${TABLE1_CONFIG_NAME}"
 
 END_TIME=$(date +%s)
 
