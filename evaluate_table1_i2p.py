@@ -406,7 +406,11 @@ def group_summary_row(
         name: extrapolate(count, n_images, population)
         for name, count in result.counts.items()
     }
-    paper = PAPER_RESULTS.get((schedule, strength))
+    paper = (
+        PAPER_RESULTS.get((schedule, strength))
+        if population == EXPECTED_POPULATION
+        else None
+    )
     return {
         "schedule": schedule,
         "strength": strength,

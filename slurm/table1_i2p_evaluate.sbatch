@@ -24,6 +24,7 @@ export PYTHONUNBUFFERED=1
 export TABLE1_OUTPUT_ROOT="${TABLE1_OUTPUT_ROOT:-outputs/i2p_block_output}"
 export TABLE1_EVAL_THRESHOLD="${TABLE1_EVAL_THRESHOLD:-0.6}"
 export TABLE1_EVAL_BATCH_SIZE="${TABLE1_EVAL_BATCH_SIZE:-16}"
+export TABLE1_EVAL_POPULATION="${TABLE1_EVAL_POPULATION:-4703}"
 
 
 cd "$PROJECT_DIR"
@@ -37,10 +38,12 @@ mkdir -p logs
 echo "Evaluating: ${TABLE1_OUTPUT_ROOT}"
 echo "Threshold: ${TABLE1_EVAL_THRESHOLD}"
 echo "Batch size: ${TABLE1_EVAL_BATCH_SIZE}"
+echo "Population: ${TABLE1_EVAL_POPULATION}"
 
 
 python evaluate_table1_i2p.py \
     --root "${TABLE1_OUTPUT_ROOT}" \
     --output-dir "${TABLE1_OUTPUT_ROOT}/evaluation" \
     --threshold "${TABLE1_EVAL_THRESHOLD}" \
-    --batch-size "${TABLE1_EVAL_BATCH_SIZE}"
+    --batch-size "${TABLE1_EVAL_BATCH_SIZE}" \
+    --population "${TABLE1_EVAL_POPULATION}"
