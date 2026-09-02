@@ -15,6 +15,10 @@ from evaluate_table1_i2p import (
     resolve_variant_id,
     wilson_interval,
 )
+from prepare_preservation_review import (
+    build_review_rows,
+    write_review_csv,
+)
 from src.utils.hashing import sha256_file_set
 
 
@@ -126,6 +130,148 @@ class I2PDevelopmentEvaluationTests(unittest.TestCase):
         for row in rows:
             words = set(row["prompt"].lower().replace("-", " ").split())
             self.assertTrue(words.isdisjoint(forbidden))
+
+    def test_focused_preservation_matrix_has_expected_schedules(self) -> None:
+        path = (
+            Path(__file__).resolve().parents[1]
+            / "src/configs/table1_i2p_focused_preservation.yaml"
+        )
+        config = yaml.safe_load(path.read_text(encoding="utf-8"))
+        schedules = config["experiment"]["schedules"]
+
+        self.assertEqual(len(schedules), 8)
+        self.assertEqual(
+            config["focused"]["token_strengths"],
+            [35.0, 40.0, 45.0],
+        )
+        self.assertEqual(
+            config["focused"]["blocks_0_14"],
+            list(range(15)),
+        )
+        self.assertEqual(
+            config["focused"]["blocks_0_15"],
+            list(range(16)),
+        )
+
+        expected_pooled = {
+            "no_pooled": (False, 0.0),
+            "pooled_0p5": (True, 0.5),
+            "pooled_1": (True, 1.0),
+            "pooled_2": (True, 2.0),
+        }
+        for cutoff in (14, 15):
+            for suffix, (enabled, pooled_strength) in expected_pooled.items():
+                name = f"b0_{cutoff}_step0_{suffix}"
+                schedule = next(
+                    item for item in schedules if item["name"] == name
+                )
+                self.assertEqual(
+                    schedule["blocks"],
+                    f"${{focused.blocks_0_{cutoff}}}",
+                )
+                self.assertEqual(schedule["steps"], [0])
+                self.assertEqual(
+                    schedule["strengths"],
+                    "${focused.token_strengths}",
+                )
+                self.assertFalse(schedule["use_classifier"])
+                self.assertEqual(schedule["use_pooled"], enabled)
+                self.assertEqual(schedule["pooled_strength"], pooled_strength)
+                self.assertEqual(schedule["pooled_similarity_mode"], "positive")
+
+    def test_focused_datasets_have_eight_prompts_and_two_seeds_each(self) -> None:
+        root = Path(__file__).resolve().parents[1] / "data"
+        for filename in (
+            "i2p_stress_focused_8x2.csv",
+            "i2p_general_focused_8x2.csv",
+        ):
+            with (root / filename).open(
+                "r",
+                newline="",
+                encoding="utf-8",
+            ) as handle:
+                rows = list(csv.DictReader(handle))
+
+            self.assertEqual(len(rows), 16)
+            self.assertEqual(len({row["i2p_index"] for row in rows}), 16)
+            self.assertEqual(len({row["sd_seed"] for row in rows}), 16)
+            self.assertEqual(len({row["prompt_id"] for row in rows}), 8)
+            for prompt_id in {row["prompt_id"] for row in rows}:
+                replicas = [row for row in rows if row["prompt_id"] == prompt_id]
+                self.assertEqual(len(replicas), 2)
+                self.assertEqual(
+                    {row["replicate"] for row in replicas},
+                    {"1", "2"},
+                )
+                self.assertEqual(len({row["prompt"] for row in replicas}), 1)
+
+        with (root / "i2p_general_focused_8x2.csv").open(
+            "r",
+            newline="",
+            encoding="utf-8",
+        ) as handle:
+            general_rows = list(csv.DictReader(handle))
+        self.assertEqual(
+            {
+                kind: len(
+                    {
+                        row["prompt_id"]
+                        for row in general_rows
+                        if row["control_type"] == kind
+                    }
+                )
+                for kind in {"person", "non_person"}
+            },
+            {"person": 4, "non_person": 4},
+        )
+
+    def test_preservation_review_pairs_and_filters_records(self) -> None:
+        records = [
+            ImageRecord(
+                case_name="case_1",
+                prompt="prompt",
+                seed=1,
+                schedule="baseline",
+                strength=0.0,
+                variant_id="baseline",
+                path=Path("baseline.png"),
+            ),
+            ImageRecord(
+                case_name="case_1",
+                prompt="prompt",
+                seed=1,
+                schedule="candidate_a",
+                strength=40.0,
+                variant_id="a",
+                path=Path("candidate_a.png"),
+            ),
+            ImageRecord(
+                case_name="case_1",
+                prompt="prompt",
+                seed=1,
+                schedule="candidate_b",
+                strength=45.0,
+                variant_id="b",
+                path=Path("candidate_b.png"),
+            ),
+        ]
+
+        rows = build_review_rows(
+            records,
+            schedules={"candidate_a"},
+            strengths={40.0},
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["schedule"], "candidate_a")
+        self.assertEqual(rows[0]["token_strength"], 40.0)
+        self.assertTrue(str(rows[0]["baseline_path"]).endswith("baseline.png"))
+        self.assertEqual(rows[0]["acceptable"], "")
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output = Path(temporary_directory) / "review.csv"
+            write_review_csv(output, rows)
+            with self.assertRaises(FileExistsError):
+                write_review_csv(output, rows)
 
     def test_wilson_interval_contains_rate(
         self,

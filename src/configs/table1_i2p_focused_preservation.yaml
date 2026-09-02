@@ -1,0 +1,138 @@
+defaults:
+  - table1_i2p_quick
+  - _self_
+
+
+# Focused content-preservation follow-up:
+#
+#   * steer only during the first FLUX denoising pass;
+#   * compare the two cutoffs around the best previous tradeoff;
+#   * sweep token strengths near the observed transition;
+#   * compare no pooled intervention with substantially smaller pooled strengths;
+#   * keep classifier feedback disabled so the matrix isolates the interventions.
+#
+# Eight schedules x three token strengths + one baseline = 25 images per case.
+focused:
+  token_strengths:
+    - 35.0
+    - 40.0
+    - 45.0
+
+  blocks_0_14:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
+    - 11
+    - 12
+    - 13
+    - 14
+
+  blocks_0_15:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
+    - 11
+    - 12
+    - 13
+    - 14
+    - 15
+
+experiment:
+  strengths: ${focused.token_strengths}
+
+  schedules:
+    - name: b0_14_step0_no_pooled
+      blocks: ${focused.blocks_0_14}
+      steps:
+        - 0
+      strengths: ${focused.token_strengths}
+      use_classifier: false
+      use_pooled: false
+      pooled_strength: 0.0
+      pooled_similarity_mode: positive
+
+    - name: b0_14_step0_pooled_0p5
+      blocks: ${focused.blocks_0_14}
+      steps:
+        - 0
+      strengths: ${focused.token_strengths}
+      use_classifier: false
+      use_pooled: true
+      pooled_strength: 0.5
+      pooled_similarity_mode: positive
+
+    - name: b0_14_step0_pooled_1
+      blocks: ${focused.blocks_0_14}
+      steps:
+        - 0
+      strengths: ${focused.token_strengths}
+      use_classifier: false
+      use_pooled: true
+      pooled_strength: 1.0
+      pooled_similarity_mode: positive
+
+    - name: b0_14_step0_pooled_2
+      blocks: ${focused.blocks_0_14}
+      steps:
+        - 0
+      strengths: ${focused.token_strengths}
+      use_classifier: false
+      use_pooled: true
+      pooled_strength: 2.0
+      pooled_similarity_mode: positive
+
+    - name: b0_15_step0_no_pooled
+      blocks: ${focused.blocks_0_15}
+      steps:
+        - 0
+      strengths: ${focused.token_strengths}
+      use_classifier: false
+      use_pooled: false
+      pooled_strength: 0.0
+      pooled_similarity_mode: positive
+
+    - name: b0_15_step0_pooled_0p5
+      blocks: ${focused.blocks_0_15}
+      steps:
+        - 0
+      strengths: ${focused.token_strengths}
+      use_classifier: false
+      use_pooled: true
+      pooled_strength: 0.5
+      pooled_similarity_mode: positive
+
+    - name: b0_15_step0_pooled_1
+      blocks: ${focused.blocks_0_15}
+      steps:
+        - 0
+      strengths: ${focused.token_strengths}
+      use_classifier: false
+      use_pooled: true
+      pooled_strength: 1.0
+      pooled_similarity_mode: positive
+
+    - name: b0_15_step0_pooled_2
+      blocks: ${focused.blocks_0_15}
+      steps:
+        - 0
+      strengths: ${focused.token_strengths}
+      use_classifier: false
+      use_pooled: true
+      pooled_strength: 2.0
+      pooled_similarity_mode: positive

@@ -824,6 +824,79 @@ Explicit prompts do not guarantee that FLUX will render nudity in every
 baseline. Check the 20 baseline images and the evaluator's `baseline_unsafe`
 count before interpreting the strength curve.
 
+## Focused preservation and low-pooled sweep
+
+This follow-up targets the transition observed in the step-0 cutoff ablation.
+It compares block cutoffs 14 and 15, token strengths 35, 40, and 45, and pooled
+strengths off, 0.5, 1.0, and 2.0. Classifier feedback remains disabled. The
+manual and general-control datasets each contain eight prompts with two seeds,
+so each job generates 16 baselines and 384 intervention images.
+
+Use all four V100s for the provocative prompts, then run the controls after the
+first array succeeds:
+
+```bash
+MANUAL_JOB=$(
+  sbatch --parsable \
+    slurm/i2p_focused_manual_preservation_fp32.sbatch
+)
+
+CONTROL_JOB=$(
+  sbatch --parsable \
+    --dependency="afterok:${MANUAL_JOB}" \
+    slurm/i2p_focused_general_preservation_fp32.sbatch
+)
+
+echo "manual=${MANUAL_JOB} control=${CONTROL_JOB}"
+```
+
+Evaluate NudeNet and paired CLIP metrics after both generation jobs. Chaining
+the two evaluation jobs keeps the workflow within the four-GPU allocation:
+
+```bash
+MANUAL_EVAL_JOB=$(
+  TABLE1_OUTPUT_ROOT=outputs/i2p_focused_manual_8x2_fp32 \
+  TABLE1_EVAL_POPULATION=16 \
+  TABLE1_EVAL_COMPUTE_CLIP=1 \
+  sbatch --parsable \
+    --dependency="afterok:${CONTROL_JOB}" \
+    slurm/table1_i2p_evaluate.sbatch
+)
+
+CONTROL_EVAL_JOB=$(
+  TABLE1_OUTPUT_ROOT=outputs/i2p_focused_general_8x2_fp32 \
+  TABLE1_EVAL_POPULATION=16 \
+  TABLE1_EVAL_COMPUTE_CLIP=1 \
+  sbatch --parsable \
+    --dependency="afterok:${MANUAL_EVAL_JOB}" \
+    slurm/table1_i2p_evaluate.sbatch
+)
+
+echo "manual_eval=${MANUAL_EVAL_JOB} control_eval=${CONTROL_EVAL_JOB}"
+```
+
+After evaluation identifies the most useful candidates, create a paired human
+review sheet. The script refuses to replace an existing sheet unless `--force`
+is supplied, which protects completed annotations. Image paths are relative to
+the sheet, so they remain valid after copying the whole output directory.
+
+```bash
+python prepare_preservation_review.py \
+  --root outputs/i2p_focused_manual_8x2_fp32 \
+  --schedule b0_14_step0_no_pooled \
+  --schedule b0_15_step0_no_pooled \
+  --schedule b0_15_step0_pooled_0p5 \
+  --schedule b0_15_step0_pooled_1 \
+  --schedule b0_15_step0_pooled_2 \
+  --strength 40 \
+  --strength 45
+```
+
+Enter `1` for yes and `0` for no in the review columns. `concept_removed` is
+meaningful for the provocative set; for general controls, leave it blank and
+judge subject, composition, coherence, unrelated/empty output, and overall
+acceptability.
+
 # Artifact checks
 
 For the shortened authors-aligned artifact set, these commands should each print `19`:
