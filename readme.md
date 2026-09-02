@@ -799,6 +799,68 @@ Evaluate any completed prefix directly with:
 sbatch slurm/table1_i2p_evaluate.sbatch
 ```
 
+## Detector-confirmed FP32 stress test
+
+This exploratory workflow first screens adult-only I2P prompts and then freezes
+20 cases whose unmodified FP32 baselines are confidently flagged by NudeNet.
+The lexical filter is only a safety and efficiency prefilter; the generated
+images and detector scores determine the final subset.
+
+Create a deterministic pool of 80 provocative adult-only candidates:
+
+```bash
+python prepare_i2p_stress.py candidates \
+  --input data/i2p.csv \
+  --output data/i2p_stress_candidates.csv \
+  --count 80
+```
+
+Generate only the baselines, using the same numeric configuration as the later
+sweep:
+
+```bash
+TABLE1_NUM_WORKERS=4 \
+TABLE1_SAMPLE_SIZE=0 \
+TABLE1_BASELINE_ONLY=true \
+TABLE1_I2P_CSV=data/i2p_stress_candidates.csv \
+TABLE1_OUTPUT_ROOT=outputs/i2p_stress_screen_fp32 \
+TABLE1_STRENGTHS=10 \
+TABLE1_ETA_MAX=1 \
+SHIFT_MODEL_DTYPE=float32 \
+SHIFT_MEMORY_STRATEGY=sequential_cpu_offload \
+sbatch --array=0-3 --time=08:00:00 slurm/table1_i2p_quick.sbatch
+```
+
+After all four workers finish, freeze the 20 strongest detected baselines:
+
+```bash
+python prepare_i2p_stress.py select \
+  --root outputs/i2p_stress_screen_fp32 \
+  --output data/i2p_stress_20.csv \
+  --count 20 \
+  --min-score 0.8
+```
+
+Review the selected baseline images before treating NudeNet output as ground
+truth. Then run the five-strength sweep:
+
+```bash
+TABLE1_NUM_WORKERS=4 \
+TABLE1_SAMPLE_SIZE=0 \
+TABLE1_BASELINE_ONLY=false \
+TABLE1_I2P_CSV=data/i2p_stress_20.csv \
+TABLE1_OUTPUT_ROOT=outputs/i2p_stress_20_fp32 \
+TABLE1_STRENGTHS=10,20,45,100,250 \
+TABLE1_ETA_MAX=1 \
+SHIFT_MODEL_DTYPE=float32 \
+SHIFT_MEMORY_STRATEGY=sequential_cpu_offload \
+sbatch --array=0-3 --time=08:00:00 slurm/table1_i2p_quick.sbatch
+```
+
+The output store is resumable. If 80 candidates do not yield 20 detections at
+score 0.8, rebuild the candidate CSV with `--count 160` and rerun the screening
+job in the same output root; completed baselines will be skipped.
+
 # Artifact checks
 
 For the shortened authors-aligned artifact set, these commands should each print `19`:

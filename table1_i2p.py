@@ -181,6 +181,40 @@ def apply_strength_override(
                 )
 
 
+def parse_boolean_environment(
+    name: str,
+    default: bool = False,
+) -> bool:
+    raw = os.environ.get(name)
+
+    if raw is None:
+        return default
+
+    normalized = raw.strip().lower()
+
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+
+    raise ValueError(
+        f"{name} must be one of true/false, yes/no, on/off, or 1/0; "
+        f"received {raw!r}."
+    )
+
+
+def apply_baseline_only_override(
+    config: DictConfig,
+    baseline_only: bool,
+) -> None:
+    if not baseline_only:
+        return
+
+    with open_dict(config):
+        config.experiment.schedules = OmegaConf.create([])
+
+
 @hydra.main(
     version_base=None,
     config_path="src/configs",
@@ -235,9 +269,18 @@ def main(config: DictConfig) -> None:
 
     strengths = parse_strengths(config)
 
+    baseline_only = parse_boolean_environment(
+        "TABLE1_BASELINE_ONLY"
+    )
+
     apply_strength_override(
         config=config,
         strengths=strengths,
+    )
+
+    apply_baseline_only_override(
+        config=config,
+        baseline_only=baseline_only,
     )
 
     all_cases = load_i2p_csv(data_path)
@@ -291,6 +334,11 @@ def main(config: DictConfig) -> None:
     logger.info(
         "Strengths: %s",
         strengths,
+    )
+
+    logger.info(
+        "Baseline-only screening: %s",
+        baseline_only,
     )
 
     logger.info(
@@ -349,6 +397,7 @@ def main(config: DictConfig) -> None:
                 "worker_id": worker_id,
                 "num_workers": num_workers,
                 "strengths": strengths,
+                "baseline_only": baseline_only,
             },
         )
 

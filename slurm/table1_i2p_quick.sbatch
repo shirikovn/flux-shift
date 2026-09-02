@@ -56,6 +56,7 @@ export SHIFT_ARTIFACTS_ROOT="${SHIFT_ARTIFACTS_ROOT:-artifacts/nudity_block_outp
 export SHIFT_MODEL_DTYPE="${SHIFT_MODEL_DTYPE:-float16}"
 export SHIFT_MEMORY_STRATEGY="${SHIFT_MEMORY_STRATEGY:-model_cpu_offload}"
 export TABLE1_ETA_MAX="${TABLE1_ETA_MAX:-20}"
+export TABLE1_BASELINE_ONLY="${TABLE1_BASELINE_ONLY:-false}"
 
 
 cd "$PROJECT_DIR"
@@ -84,6 +85,7 @@ echo "Artifacts: ${SHIFT_ARTIFACTS_ROOT}"
 echo "Model dtype: ${SHIFT_MODEL_DTYPE}"
 echo "Memory strategy: ${SHIFT_MEMORY_STRATEGY}"
 echo "Classifier eta cap: ${TABLE1_ETA_MAX}"
+echo "Baseline only: ${TABLE1_BASELINE_ONLY}"
 echo
 
 
@@ -97,10 +99,7 @@ echo "=========================================="
 
 test -f "${TABLE1_I2P_CSV}"
 
-ROW_COUNT=$(
-    tail -n +2 "${TABLE1_I2P_CSV}" \
-    | wc -l
-)
+ROW_COUNT=$(python -c 'import csv, sys; print(sum(1 for _ in csv.DictReader(open(sys.argv[1], encoding="utf-8", newline=""))))' "${TABLE1_I2P_CSV}")
 
 echo "I2P rows: ${ROW_COUNT}"
 
