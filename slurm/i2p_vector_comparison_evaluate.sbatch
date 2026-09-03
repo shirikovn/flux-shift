@@ -27,6 +27,7 @@ export TOKENIZERS_PARALLELISM=false
 export I2P_DEFAULT_ROOT="${I2P_DEFAULT_ROOT:-outputs/i2p_matched_standard_fp32}"
 export I2P_CONSISTENT_ROOT="${I2P_CONSISTENT_ROOT:-outputs/i2p_matched_consistent_fp32}"
 export I2P_COMPARISON_OUTPUT="${I2P_COMPARISON_OUTPUT:-outputs/i2p_vector_comparison/evaluation}"
+export I2P_REUSE_EVALUATION="${I2P_REUSE_EVALUATION:-false}"
 
 export TABLE1_EVAL_THRESHOLD="${TABLE1_EVAL_THRESHOLD:-0.6}"
 export TABLE1_EVAL_BATCH_SIZE="${TABLE1_EVAL_BATCH_SIZE:-16}"
@@ -53,26 +54,44 @@ echo "=========================================="
 echo "Default root: ${I2P_DEFAULT_ROOT}"
 echo "Consistent root: ${I2P_CONSISTENT_ROOT}"
 echo "Comparison output: ${I2P_COMPARISON_OUTPUT}"
+echo "Reuse existing metric CSVs: ${I2P_REUSE_EVALUATION}"
 echo "NudeNet threshold: ${TABLE1_EVAL_THRESHOLD}"
 echo "CLIP model: ${TABLE1_CLIP_MODEL_ID}"
 
 
-for EXPERIMENT_ROOT in \
-    "${I2P_DEFAULT_ROOT}" \
-    "${I2P_CONSISTENT_ROOT}"
-do
-    echo
-    echo "Evaluating ${EXPERIMENT_ROOT}"
-    python evaluate_table1_i2p.py \
-        --root "${EXPERIMENT_ROOT}" \
-        --output-dir "${EXPERIMENT_ROOT}/evaluation" \
-        --threshold "${TABLE1_EVAL_THRESHOLD}" \
-        --batch-size "${TABLE1_EVAL_BATCH_SIZE}" \
-        --compute-clip \
-        --clip-model-id "${TABLE1_CLIP_MODEL_ID}" \
-        --clip-batch-size "${TABLE1_CLIP_BATCH_SIZE}" \
-        --clip-device "${TABLE1_CLIP_DEVICE}"
-done
+if [[ "${I2P_REUSE_EVALUATION}" == "true" ]]; then
+    for EXPERIMENT_ROOT in \
+        "${I2P_DEFAULT_ROOT}" \
+        "${I2P_CONSISTENT_ROOT}"
+    do
+        for METRIC_FILE in summary.csv paired_summary.csv clip_summary.csv
+        do
+            METRIC_PATH="${EXPERIMENT_ROOT}/evaluation/${METRIC_FILE}"
+            if [[ ! -f "${METRIC_PATH}" ]]; then
+                echo "Cannot reuse metrics: missing ${METRIC_PATH}" >&2
+                exit 1
+            fi
+        done
+    done
+    echo "Reusing completed NudeNet and CLIP metric CSVs."
+else
+    for EXPERIMENT_ROOT in \
+        "${I2P_DEFAULT_ROOT}" \
+        "${I2P_CONSISTENT_ROOT}"
+    do
+        echo
+        echo "Evaluating ${EXPERIMENT_ROOT}"
+        python evaluate_table1_i2p.py \
+            --root "${EXPERIMENT_ROOT}" \
+            --output-dir "${EXPERIMENT_ROOT}/evaluation" \
+            --threshold "${TABLE1_EVAL_THRESHOLD}" \
+            --batch-size "${TABLE1_EVAL_BATCH_SIZE}" \
+            --compute-clip \
+            --clip-model-id "${TABLE1_CLIP_MODEL_ID}" \
+            --clip-batch-size "${TABLE1_CLIP_BATCH_SIZE}" \
+            --clip-device "${TABLE1_CLIP_DEVICE}"
+    done
+fi
 
 
 python summarize_i2p_comparison.py \

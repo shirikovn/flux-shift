@@ -508,6 +508,7 @@ ALL_METHOD_FIELDS = [
     "vector_type",
     "schedule",
     "strength",
+    "variant_id",
     "blocks",
     "num_blocks",
     "runtime_steps",

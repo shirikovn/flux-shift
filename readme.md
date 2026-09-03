@@ -996,6 +996,14 @@ Prompt-image CLIP is reported but is not used as the preservation term,
 because the provocative prompts explicitly request the content being erased.
 Matched-baseline image CLIP is used instead.
 
+If the NudeNet and CLIP CSVs were already completed and only summary creation
+failed, reuse them instead of measuring every image again:
+
+```bash
+I2P_REUSE_EVALUATION=true \
+sbatch slurm/i2p_vector_comparison_evaluate.sbatch
+```
+
 # Artifact checks
 
 For the shortened official-compatible artifact set, these commands should each print `19`:

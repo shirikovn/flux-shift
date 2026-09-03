@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import tempfile
 import unittest
+from pathlib import Path
 
+from evaluate_table1_i2p import write_csv
 from summarize_i2p_comparison import (
+    ALL_METHOD_FIELDS,
     add_rankings,
     compact_indices,
     parse_named_path,
@@ -32,6 +37,16 @@ def candidate(
 
 
 class I2PComparisonSummaryTests(unittest.TestCase):
+    def test_all_methods_csv_schema_includes_variant_id(self) -> None:
+        row = dict.fromkeys(ALL_METHOD_FIELDS, "")
+        row["variant_id"] = "test-variant"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "all_methods.csv"
+            write_csv(path, ALL_METHOD_FIELDS, [row])
+            with path.open(newline="", encoding="utf-8") as handle:
+                written = next(csv.DictReader(handle))
+        self.assertEqual(written["variant_id"], "test-variant")
+
     def test_parse_named_path_and_compact_indices(self) -> None:
         name, path = parse_named_path("default=outputs/default")
         self.assertEqual(name, "default")
