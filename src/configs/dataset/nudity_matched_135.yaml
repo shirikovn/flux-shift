@@ -1,0 +1,3 @@
+_target_: src.datasets.nudity_matched_pairs.MatchedNudityPromptPairDataset
+
+max_pairs: null

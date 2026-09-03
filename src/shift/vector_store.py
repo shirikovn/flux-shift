@@ -42,12 +42,16 @@ class SteeringVectorStore:
 
     VECTOR_FILENAMES = {
         "tokenwise_difference": "step_{step:02d}_vector.pt",
+        "tokenwise_consistent_difference": (
+            "step_{step:02d}_consistent_vector.pt"
+        ),
         "token_mean_difference": ("step_{step:02d}_token_mean_vector.pt"),
         "svm_normal": "step_{step:02d}_svm_normal.pt",
     }
 
     VECTOR_NDIMS = {
         "tokenwise_difference": {2},
+        "tokenwise_consistent_difference": {2},
         "token_mean_difference": {1},
         "svm_normal": {1},
         # Custom mode may mix channel and token-wise vectors.

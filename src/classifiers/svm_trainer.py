@@ -68,10 +68,14 @@ class LinearSVMTrainer:
     """
     Trains an ensemble of token-pooled linear SVMs per FLUX location.
 
-    The authors' released implementation mean-pools text tokens and
+    The official implementation mean-pools text tokens and
     L2-normalizes every sample before fitting a linear probability SVC.
-    Like the released code, each ensemble member is retained after a
+    In compatibility mode, each ensemble member is retained after a
     stratified 60/40 sample split instead of being refit on all samples.
+
+    ``split_by_pair=True`` is the recommended diagnostic mode. It keeps the
+    positive and negative members of a prompt pair in the same partition,
+    preventing counterfactual-pair leakage into validation.
     """
 
     def __init__(
@@ -88,6 +92,8 @@ class LinearSVMTrainer:
         l2_normalize: bool = True,
         ensemble_size: int = 2,
         probability: bool = True,
+        split_by_pair: bool = False,
+        refit_full_after_validation: bool = False,
         expected_activation_location: str = EXPECTED_ACTIVATION_LOCATION,
     ) -> None:
         self.dataset_dir = Path(dataset_dir)
@@ -106,6 +112,8 @@ class LinearSVMTrainer:
         self.l2_normalize = bool(l2_normalize)
         self.ensemble_size = int(ensemble_size)
         self.probability = bool(probability)
+        self.split_by_pair = bool(split_by_pair)
+        self.refit_full_after_validation = bool(refit_full_after_validation)
         self.expected_activation_location = str(expected_activation_location)
 
         if not self.dataset_dir.is_dir():
@@ -132,7 +140,7 @@ class LinearSVMTrainer:
         if self.standardize and self.l2_normalize:
             raise ValueError(
                 "standardize and l2_normalize are mutually exclusive. "
-                "The released SHIFT classifier uses per-sample L2 normalization."
+                "The official SHIFT classifier uses per-sample L2 normalization."
             )
 
         if not self.probability:
@@ -166,6 +174,8 @@ class LinearSVMTrainer:
             "kernel": "linear",
             "probability": self.probability,
             "ensemble_size": self.ensemble_size,
+            "split_strategy": self._split_strategy_name(),
+            "refit_full_after_validation": self.refit_full_after_validation,
             "positive_class_label": 1,
             "negative_class_label": 0,
             "step_indices": self.step_indices,
@@ -213,43 +223,55 @@ class LinearSVMTrainer:
             samples=samples,
         )
 
-        # The released trainer concatenates all positives followed by all
-        # negatives before calling train_test_split. Preserve that ordering
-        # so seeds 42/43 select the same prompt rows.
-        author_order = np.concatenate(
+        # The official trainer concatenates positives followed by negatives.
+        # Keep that order for compatibility when split_by_pair is disabled.
+        class_order = np.concatenate(
             [
                 np.flatnonzero(labels == 1),
                 np.flatnonzero(labels == 0),
             ]
         )
-        features = features[author_order]
-        labels = labels[author_order]
-        samples = [samples[int(index)] for index in author_order]
+        features = features[class_order]
+        labels = labels[class_order]
+        samples = [samples[int(index)] for index in class_order]
 
-        models: list[Pipeline] = []
+        evaluation_models: list[Pipeline] = []
         member_documents: list[dict[str, Any]] = []
 
         for member_index in range(self.ensemble_size):
             member_seed = self.random_seed + member_index
 
-            train_indices, validation_indices = train_test_split(
-                np.arange(features.shape[0]),
-                test_size=self.validation_fraction,
-                random_state=member_seed,
-                stratify=labels,
-                shuffle=True,
+            train_indices, validation_indices = self._split_indices(
+                labels=labels,
+                samples=samples,
+                random_seed=member_seed,
             )
 
             train_pair_names = sorted(
-                {str(samples[index]["pair_name"]) for index in train_indices}
+                {
+                    self._pair_group_name(samples[index]["pair_name"])
+                    for index in train_indices
+                }
             )
             validation_pair_names = sorted(
-                {str(samples[index]["pair_name"]) for index in validation_indices}
+                {
+                    self._pair_group_name(samples[index]["pair_name"])
+                    for index in validation_indices
+                }
             )
+            pair_overlap = sorted(
+                set(train_pair_names).intersection(validation_pair_names)
+            )
+
+            if self.split_by_pair and pair_overlap:
+                raise RuntimeError(
+                    "Grouped pair split leaked pairs across partitions: "
+                    f"{pair_overlap}"
+                )
 
             model = self._build_model(random_seed=member_seed)
             model.fit(features[train_indices], labels[train_indices])
-            models.append(model)
+            evaluation_models.append(model)
 
             member_documents.append(
                 {
@@ -259,6 +281,7 @@ class LinearSVMTrainer:
                     "validation_num_samples": int(len(validation_indices)),
                     "train_pair_names": train_pair_names,
                     "validation_pair_names": validation_pair_names,
+                    "pair_overlap": pair_overlap,
                     "train": self._evaluate(
                         model=model,
                         features=features[train_indices],
@@ -272,7 +295,17 @@ class LinearSVMTrainer:
                 }
             )
 
-        final_model = ProbabilitySVCEnsemble(models)
+        if self.refit_full_after_validation:
+            saved_models = []
+            for member_index in range(self.ensemble_size):
+                member_seed = self.random_seed + member_index
+                model = self._build_model(random_seed=member_seed)
+                model.fit(features, labels)
+                saved_models.append(model)
+        else:
+            saved_models = evaluation_models
+
+        final_model = ProbabilitySVCEnsemble(saved_models)
         train_metrics = self._average_metrics(
             [member["train"] for member in member_documents]
         )
@@ -280,7 +313,9 @@ class LinearSVMTrainer:
             [member["validation"] for member in member_documents]
         )
 
-        svm_normal, svm_normal_metadata = self._extract_ensemble_svm_normal(models)
+        svm_normal, svm_normal_metadata = self._extract_ensemble_svm_normal(
+            saved_models
+        )
 
         block_dir = self.output_dir / f"block_{block_index:02d}"
 
@@ -313,11 +348,22 @@ class LinearSVMTrainer:
             "ensemble_size": self.ensemble_size,
             "num_samples": int(features.shape[0]),
             "num_pairs": len({str(sample["pair_name"]) for sample in samples}),
+            "num_pair_groups": len(
+                {
+                    self._pair_group_name(sample["pair_name"])
+                    for sample in samples
+                }
+            ),
             "train_num_samples": int(member_documents[0]["train_num_samples"]),
             "validation_num_samples": int(member_documents[0]["validation_num_samples"]),
-            "split_strategy": "stratified_samples_like_authors_release",
-            "evaluation_model": "mean_of_stratified_split_members",
-            "saved_model": "ensemble_of_stratified_split_models",
+            "split_strategy": self._split_strategy_name(),
+            "refit_full_after_validation": self.refit_full_after_validation,
+            "evaluation_model": "mean_of_split_members",
+            "saved_model": (
+                "ensemble_refit_on_all_samples"
+                if self.refit_full_after_validation
+                else "ensemble_of_split_models"
+            ),
             "train": train_metrics,
             "validation": validation_metrics,
             "members": member_documents,
@@ -336,13 +382,14 @@ class LinearSVMTrainer:
         OmegaConf.save(
             config=OmegaConf.create(
                 {
-                    "split_strategy": "stratified_samples_like_authors_release",
+                    "split_strategy": self._split_strategy_name(),
                     "members": [
                         {
                             "member_index": member["member_index"],
                             "random_seed": member["random_seed"],
                             "train_pair_names": member["train_pair_names"],
                             "validation_pair_names": member["validation_pair_names"],
+                            "pair_overlap": member["pair_overlap"],
                         }
                         for member in member_documents
                     ],
@@ -363,6 +410,86 @@ class LinearSVMTrainer:
             "validation_roc_auc": validation_metrics["roc_auc"],
             "validation_probability_gap": (validation_metrics["probability_gap"]),
         }
+
+    def _split_strategy_name(self) -> str:
+        if self.split_by_pair:
+            return "grouped_prompt_pairs"
+        return "stratified_samples_official_compatibility"
+
+    def _split_indices(
+        self,
+        labels: np.ndarray,
+        samples: list[dict[str, Any]],
+        random_seed: int,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        if not self.split_by_pair:
+            return train_test_split(
+                np.arange(labels.shape[0]),
+                test_size=self.validation_fraction,
+                random_state=random_seed,
+                stratify=labels,
+                shuffle=True,
+            )
+
+        pair_names = np.asarray(
+            sorted(
+                {
+                    self._pair_group_name(sample["pair_name"])
+                    for sample in samples
+                }
+            ),
+            dtype=object,
+        )
+        train_pairs, validation_pairs = train_test_split(
+            pair_names,
+            test_size=self.validation_fraction,
+            random_state=random_seed,
+            shuffle=True,
+        )
+        train_pair_set = set(train_pairs.tolist())
+        validation_pair_set = set(validation_pairs.tolist())
+
+        train_indices = np.asarray(
+            [
+                index
+                for index, sample in enumerate(samples)
+                if self._pair_group_name(sample["pair_name"])
+                in train_pair_set
+            ],
+            dtype=np.int64,
+        )
+        validation_indices = np.asarray(
+            [
+                index
+                for index, sample in enumerate(samples)
+                if self._pair_group_name(sample["pair_name"])
+                in validation_pair_set
+            ],
+            dtype=np.int64,
+        )
+
+        for partition_name, indices in (
+            ("train", train_indices),
+            ("validation", validation_indices),
+        ):
+            if set(labels[indices].tolist()) != {0, 1}:
+                raise RuntimeError(
+                    f"Grouped {partition_name} split does not contain both classes."
+                )
+
+        return train_indices, validation_indices
+
+    @staticmethod
+    def _pair_group_name(value: Any) -> str:
+        """Map multi-seed replicas back to their source prompt pair."""
+        name = str(value)
+        marker = "__replica_"
+        if marker not in name:
+            return name
+        base, suffix = name.rsplit(marker, maxsplit=1)
+        if suffix.isdigit():
+            return base
+        return name
 
     def _build_model(self, random_seed: int) -> Pipeline:
         pipeline_steps: list[tuple[str, Any]] = []
@@ -759,6 +886,12 @@ class LinearSVMTrainer:
             "positive_probability_mean": (positive_probability_mean),
             "negative_probability_mean": (negative_probability_mean),
             "probability_gap": float(positive_probability_mean - negative_probability_mean),
+            "expected_calibration_error": (
+                LinearSVMTrainer._expected_calibration_error(
+                    labels=labels,
+                    probabilities=probabilities,
+                )
+            ),
             "positive_decision_mean": (positive_decision_mean),
             "negative_decision_mean": (negative_decision_mean),
             "decision_gap": float(positive_decision_mean - negative_decision_mean),
@@ -766,3 +899,32 @@ class LinearSVMTrainer:
             "probability_mean": float(probabilities.mean()),
             "probability_max": float(probabilities.max()),
         }
+
+    @staticmethod
+    def _expected_calibration_error(
+        labels: np.ndarray,
+        probabilities: np.ndarray,
+        num_bins: int = 10,
+    ) -> float:
+        """Binary expected calibration error with equal-width bins."""
+        edges = np.linspace(0.0, 1.0, num_bins + 1)
+        total = int(labels.shape[0])
+        if total == 0:
+            raise ValueError("Cannot calibrate an empty label array.")
+
+        error = 0.0
+        for bin_index in range(num_bins):
+            lower = edges[bin_index]
+            upper = edges[bin_index + 1]
+            if bin_index == num_bins - 1:
+                mask = (probabilities >= lower) & (probabilities <= upper)
+            else:
+                mask = (probabilities >= lower) & (probabilities < upper)
+            count = int(mask.sum())
+            if count == 0:
+                continue
+            confidence = float(probabilities[mask].mean())
+            observed_rate = float(labels[mask].mean())
+            error += (count / total) * abs(confidence - observed_rate)
+
+        return float(error)

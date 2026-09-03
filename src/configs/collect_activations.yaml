@@ -13,8 +13,12 @@ output_dir: ${hydra:runtime.output_dir}
 
 collection:
   vary_seed_between_pairs: true
-  # Matches generator seeds 42000 + 10*i in the released extractor.
+  # Matches generator seeds 42000 + 10*i in the official extractor.
   seed_stride: 10
+  # Set >1 for the robust matched-counterfactual collector. Each replica
+  # still uses identical noise for the positive and negative prompts.
+  seeds_per_pair: 1
+  replica_seed_stride: 1
 
 hydra:
   run:

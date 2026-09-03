@@ -27,9 +27,12 @@ block_indices:
 step_indices:
   - 0
 
-# Authors' release: two independently seeded stratified 60/40 splits.
+# Official compatibility path: two independently seeded stratified 60/40
+# sample splits. Set true for honest paired-counterfactual validation.
 validation_fraction: 0.4
 random_seed: 42
+split_by_pair: false
+refit_full_after_validation: false
 
 c: 1.0
 class_weight: null

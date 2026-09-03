@@ -26,7 +26,7 @@ def load_mapping(path: Path) -> dict[str, Any]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Validate and summarize authors-aligned SHIFT artifacts."
+        description="Validate and summarize official-compatible SHIFT artifacts."
     )
     parser.add_argument(
         "--root",
@@ -85,6 +85,7 @@ def main() -> None:
 
     balanced_accuracies: list[float] = []
     probability_gaps: list[float] = []
+    split_strategy = str(classifier_metadata.get("split_strategy", "unknown"))
 
     for location in locations:
         block = int(location["block_index"])
@@ -101,6 +102,9 @@ def main() -> None:
         probability_gaps.append(float(location["validation_probability_gap"]))
 
     vector_files = sorted(vector_root.glob("block_*/step_00_vector.pt"))
+    consistent_vector_files = sorted(
+        vector_root.glob("block_*/step_00_consistent_vector.pt")
+    )
     classifier_files = sorted(classifier_root.glob("block_*/step_00_classifier.joblib"))
     require_equal("step-0 vector count", len(vector_files), 19)
     require_equal("step-0 classifier count", len(classifier_files), 19)
@@ -114,7 +118,29 @@ def main() -> None:
     print(f"Activation location: {EXPECTED_ACTIVATION_LOCATION}")
     print("SVM normalization: sample_l2")
     print("SVM ensemble: 2 members per block")
+    print(f"SVM split: {split_strategy}")
     print("Source locations: 19 blocks x step 0")
+    if consistent_vector_files:
+        require_equal(
+            "step-0 consistency-weighted vector count",
+            len(consistent_vector_files),
+            19,
+        )
+        vector_locations = vector_metadata.get("locations")
+        if not isinstance(vector_locations, list):
+            raise TypeError("Vector metadata has no locations list.")
+        consistency_means = [
+            float(
+                location["tokenwise_consistent_difference"][
+                    "token_consistency_mean"
+                ]
+            )
+            for location in vector_locations
+        ]
+        print(
+            "Token-wise directional consistency: "
+            f"{describe(consistency_means)}"
+        )
     print(f"Validation balanced accuracy: {describe(balanced_accuracies)}")
     print(f"Validation probability gap: {describe(probability_gaps)}")
     print("Artifact validation: OK")

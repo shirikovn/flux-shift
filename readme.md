@@ -130,13 +130,15 @@ python collect_activations.py \
 | `intervention.blocks` | Double-stream transformer blocks to collect |
 | `intervention.steps` | Diffusion steps to collect |
 | `collection.vary_seed_between_pairs` | Use a different seed for each prompt pair |
+| `collection.seeds_per_pair` | Repeat a source pair with multiple matched noise seeds |
+| `collection.replica_seed_stride` | Seed offset between replicas of one pair |
 | `intervention.tensor_dtype` | Saved activation dtype |
 | `intervention.normalize` | Normalize saved difference vectors |
 | `intervention.eps` | Numerical stability value |
 | `seed` | Base random seed |
 | `hydra.run.dir` | Artifact output directory |
 
-The authors-aligned default hooks the text output of complete FLUX double-stream blocks. It collects blocks `0–18` at step `0`, giving 19 locations. Those artifacts are reused at all four runtime steps, matching the released FLUX nudity callback while shortening V100 collection substantially.
+The official-compatible default hooks the text output of complete FLUX double-stream blocks. It collects blocks `0–18` at step `0`, giving 19 locations. Those artifacts are reused at all four runtime steps, matching the official FLUX nudity callback while shortening V100 collection substantially.
 
 The collection pipeline skips VAE decoding. When only an early subset of diffusion steps is requested, it stops after the last requested step.
 
@@ -147,6 +149,7 @@ For every requested block and step, the script saves:
 ```text
 token-wise raw difference
 token-wise normalized vector
+token-wise consistency-weighted vector
 token-mean raw difference
 token-mean normalized vector
 SVM features
@@ -179,9 +182,11 @@ SVM training runs on the CPU.
 | `trainer.l2_normalize` | L2-normalize each pooled activation; required for authors-aligned runs |
 | `trainer.ensemble_size` | Number of independently split probability SVMs; default `2` |
 | `trainer.probability` | Enable `predict_proba`; required for dynamic steering |
+| `trainer.split_by_pair` | Keep both counterfactual classes and all seed replicas in the same split |
+| `trainer.refit_full_after_validation` | Refit saved ensemble members on all samples after honest validation |
 | `hydra.run.dir` | Training output directory |
 
-The default trains one two-member ensemble for each of 19 blocks at step 0, giving 19 classifier files. Members use the released code's stratified 60/40 splits with seeds 42 and 43.
+The default trains one two-member ensemble for each of 19 blocks at step 0, giving 19 classifier files. Compatibility mode uses the official code's stratified 60/40 sample splits with seeds 42 and 43. New counterfactual collections should set `split_by_pair=true` for an honest validation estimate.
 
 ### Produced artifacts
 
@@ -394,6 +399,7 @@ Supported values:
 | Value | Tensor shape | Artifact |
 |---|---:|---|
 | `tokenwise_difference` | `[tokens, channels]` | `step_XX_vector.pt` |
+| `tokenwise_consistent_difference` | `[tokens, channels]` | `step_XX_consistent_vector.pt` |
 | `token_mean_difference` | `[channels]` | `step_XX_token_mean_vector.pt` |
 | `svm_normal` | `[channels]` | `step_XX_svm_normal.pt` |
 | `auto` | `[channels]` or `[tokens, channels]` | Custom paths only |
@@ -766,7 +772,7 @@ sbatch --dependency="afterok:${GEN_JOB}" \
   slurm/table1_i2p_evaluate.sbatch
 ```
 
-If the smoke-test images and SVM probabilities look sensible, expand the released-code setting to 64 or 256 prompts on four V100s. Keep the same strength set in a resumable output root:
+If the smoke-test images and SVM probabilities look sensible, expand the official-code setting to 64 or 256 prompts on four V100s. Keep the same strength set in a resumable output root:
 
 ```bash
 TABLE1_SAMPLE_SIZE=64 \
@@ -780,7 +786,7 @@ TABLE1_STRENGTHS=45 \
 sbatch --array=0-3 slurm/table1_i2p_quick.sbatch
 ```
 
-The released GitHub launcher uses strength 45, while the paper table reports strengths 250 and 500. Test the paper strengths in a separate resumable output root so the evaluator never sees incomplete strength groups:
+The official GitHub launcher uses strength 45, while the paper table reports strengths 250 and 500. Test the paper strengths in a separate resumable output root so the evaluator never sees incomplete strength groups:
 
 ```bash
 TABLE1_SAMPLE_SIZE=64 \
@@ -897,9 +903,63 @@ meaningful for the provocative set; for general controls, leave it blank and
 judge subject, composition, coherence, unrelated/empty output, and overall
 acceptability.
 
+## Matched-counterfactual vector collection
+
+The improved dataset contains 135 adult-only nude/clothed pairs. Subject,
+count, view, pose, setting, framing, and style are identical inside every
+pair. The artifact job uses two matched noise seeds per source pair, writes
+both the standard token-wise mean difference and a consistency-weighted
+token-wise vector, and validates SVMs by source pair rather than by sample.
+
+Build the new artifacts without replacing the official-compatible set:
+
+```bash
+MATCHED_ARTIFACT_JOB=$(
+  sbatch --parsable slurm/build_nudity_matched_artifacts.sbatch
+)
+echo "${MATCHED_ARTIFACT_JOB}"
+```
+
+First test the standard estimator on the matched data. Then run the
+consistency estimator against exactly the same prompts, seeds, blocks, and
+strengths:
+
+```bash
+MATCHED_STANDARD_JOB=$(
+  SHIFT_VECTOR_TYPE=tokenwise_difference \
+  TABLE1_OUTPUT_ROOT=outputs/i2p_matched_standard_fp32 \
+  sbatch --parsable \
+    --dependency="afterok:${MATCHED_ARTIFACT_JOB}" \
+    slurm/i2p_vector_collection_ablation_fp32.sbatch
+)
+
+MATCHED_CONSISTENT_JOB=$(
+  SHIFT_VECTOR_TYPE=tokenwise_consistent_difference \
+  TABLE1_OUTPUT_ROOT=outputs/i2p_matched_consistent_fp32 \
+  sbatch --parsable \
+    --dependency="afterok:${MATCHED_STANDARD_JOB}" \
+    slurm/i2p_vector_collection_ablation_fp32.sbatch
+)
+
+echo "standard=${MATCHED_STANDARD_JOB} consistent=${MATCHED_CONSISTENT_JOB}"
+```
+
+The array compares direction-only step-0 steering, all-step accumulation,
+SVM gating with `eta_max=1`, and the same gate plus pooled strength `0.5`.
+It sweeps token strengths `10,20,35,50,75` on the fixed provocative 8x2 set.
+Use the general-control set with the same matrix after choosing the better
+vector estimator:
+
+```bash
+SHIFT_VECTOR_TYPE=tokenwise_consistent_difference \
+TABLE1_I2P_CSV=data/i2p_general_focused_8x2.csv \
+TABLE1_OUTPUT_ROOT=outputs/i2p_matched_consistent_general_fp32 \
+sbatch slurm/i2p_vector_collection_ablation_fp32.sbatch
+```
+
 # Artifact checks
 
-For the shortened authors-aligned artifact set, these commands should each print `19`:
+For the shortened official-compatible artifact set, these commands should each print `19`:
 
 ```bash
 find artifacts/<concept>/dit/vectors \
@@ -907,6 +967,9 @@ find artifacts/<concept>/dit/vectors \
 
 find artifacts/<concept>/dit/vectors \
   -name 'step_*_token_mean_vector.pt' | wc -l
+
+find artifacts/<concept>/dit/vectors \
+  -name 'step_*_consistent_vector.pt' | wc -l
 
 find artifacts/<concept>/dit/svm_dataset \
   -name 'step_*_features.pt' | wc -l

@@ -15,6 +15,7 @@ shift:
 
   # Available:
   #   tokenwise_difference
+  #   tokenwise_consistent_difference
   #   token_mean_difference
   #   svm_normal
   vector_type: tokenwise_difference

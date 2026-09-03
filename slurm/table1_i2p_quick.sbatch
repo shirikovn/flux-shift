@@ -54,6 +54,7 @@ export TABLE1_I2P_CSV="${TABLE1_I2P_CSV:-data/i2p.csv}"
 export TABLE1_OUTPUT_ROOT="${TABLE1_OUTPUT_ROOT:-outputs/i2p_block_output}"
 export TABLE1_CONFIG_NAME="${TABLE1_CONFIG_NAME:-table1_i2p_quick}"
 export SHIFT_ARTIFACTS_ROOT="${SHIFT_ARTIFACTS_ROOT:-artifacts/nudity_block_output}"
+export SHIFT_VECTOR_TYPE="${SHIFT_VECTOR_TYPE:-tokenwise_difference}"
 export SHIFT_MODEL_DTYPE="${SHIFT_MODEL_DTYPE:-float16}"
 export SHIFT_MEMORY_STRATEGY="${SHIFT_MEMORY_STRATEGY:-model_cpu_offload}"
 export TABLE1_ETA_MAX="${TABLE1_ETA_MAX:-20}"
@@ -83,6 +84,7 @@ echo "Dataset: ${TABLE1_I2P_CSV}"
 echo "Output: ${TABLE1_OUTPUT_ROOT}"
 echo "Config: ${TABLE1_CONFIG_NAME}"
 echo "Artifacts: ${SHIFT_ARTIFACTS_ROOT}"
+echo "Vector type: ${SHIFT_VECTOR_TYPE}"
 echo "Model dtype: ${SHIFT_MODEL_DTYPE}"
 echo "Memory strategy: ${SHIFT_MEMORY_STRATEGY}"
 echo "Classifier eta cap: ${TABLE1_ETA_MAX}"
@@ -109,11 +111,34 @@ echo "=========================================="
 echo "CHECK SHIFT ARTIFACTS"
 echo "=========================================="
 
+case "${SHIFT_VECTOR_TYPE}" in
+    tokenwise_difference)
+        VECTOR_ROOT="${SHIFT_ARTIFACTS_ROOT}/dit/vectors"
+        VECTOR_PATTERN='step_00_vector.pt'
+        ;;
+    tokenwise_consistent_difference)
+        VECTOR_ROOT="${SHIFT_ARTIFACTS_ROOT}/dit/vectors"
+        VECTOR_PATTERN='step_00_consistent_vector.pt'
+        ;;
+    token_mean_difference)
+        VECTOR_ROOT="${SHIFT_ARTIFACTS_ROOT}/dit/vectors"
+        VECTOR_PATTERN='step_00_token_mean_vector.pt'
+        ;;
+    svm_normal)
+        VECTOR_ROOT="${SHIFT_ARTIFACTS_ROOT}/svm_training/classifiers"
+        VECTOR_PATTERN='step_00_svm_normal.pt'
+        ;;
+    *)
+        echo "ERROR: unsupported SHIFT_VECTOR_TYPE=${SHIFT_VECTOR_TYPE}"
+        exit 1
+        ;;
+esac
+
 VECTOR_COUNT=$(
     find \
-        "${SHIFT_ARTIFACTS_ROOT}/dit/vectors" \
+        "${VECTOR_ROOT}" \
         -type f \
-        -name 'step_00_vector.pt' \
+        -name "${VECTOR_PATTERN}" \
         | wc -l
 )
 

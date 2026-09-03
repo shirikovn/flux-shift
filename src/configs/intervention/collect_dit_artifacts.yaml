@@ -23,7 +23,7 @@ blocks:
   - 17
   - 18
 
-# The released FLUX inference callback always selects step 0.
+# The official FLUX inference callback always selects step 0.
 # Collect only that step and reuse it at all four runtime steps.
 steps:
   - 0

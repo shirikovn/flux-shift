@@ -27,6 +27,8 @@ class ActivationCollectionPipeline:
         seed: int,
         logger: logging.Logger,
         seed_stride: int = 1,
+        seeds_per_pair: int = 1,
+        replica_seed_stride: int = 1,
     ) -> None:
         self.model = model
         self.intervention_manager = intervention_manager
@@ -35,10 +37,25 @@ class ActivationCollectionPipeline:
         self.output_dir = Path(output_dir)
         self.seed = int(seed)
         self.seed_stride = int(seed_stride)
+        self.seeds_per_pair = int(seeds_per_pair)
+        self.replica_seed_stride = int(replica_seed_stride)
         self.logger = logger
 
         if self.seed_stride <= 0:
             raise ValueError("seed_stride must be positive.")
+        if self.seeds_per_pair <= 0:
+            raise ValueError("seeds_per_pair must be positive.")
+        if self.replica_seed_stride <= 0:
+            raise ValueError("replica_seed_stride must be positive.")
+        if (
+            self.seeds_per_pair > 1
+            and (self.seeds_per_pair - 1) * self.replica_seed_stride
+            >= self.seed_stride
+        ):
+            raise ValueError(
+                "Replica seeds overlap the next prompt pair. Require "
+                "(seeds_per_pair - 1) * replica_seed_stride < seed_stride."
+            )
 
     def collect(self) -> dict[str, Any]:
         pipe = self.model.get_pipeline()
@@ -78,75 +95,84 @@ class ActivationCollectionPipeline:
         )
 
         for pair_index, pair in enumerate(self.dataset):
-            pair_seed = self.seed + pair_index * self.seed_stride
-
-            self.logger.info(
-                "Collecting pair=%s, seed=%d",
-                pair.name,
-                pair_seed,
-            )
-
-            run_specs = [
-                (
-                    "negative",
-                    pair.negative_prompt,
-                ),
-                (
-                    "positive",
-                    pair.positive_prompt,
-                ),
-            ]
-
-            for prompt_role, prompt in run_specs:
-                self.intervention_manager.begin_prompt_run(
-                    pair_name=pair.name,
-                    prompt_role=prompt_role,
+            for replica_index in range(self.seeds_per_pair):
+                pair_seed = (
+                    self.seed
+                    + pair_index * self.seed_stride
+                    + replica_index * self.replica_seed_stride
+                )
+                collection_pair_name = (
+                    pair.name
+                    if self.seeds_per_pair == 1
+                    else f"{pair.name}__replica_{replica_index:02d}"
                 )
 
                 self.logger.info(
-                    "Pair=%s, role=%s",
+                    "Collecting pair=%s, source_pair=%s, replica=%d/%d, seed=%d",
+                    collection_pair_name,
                     pair.name,
-                    prompt_role,
-                )
-                self.logger.info(
-                    "Prompt: %s",
-                    prompt,
+                    replica_index + 1,
+                    self.seeds_per_pair,
+                    pair_seed,
                 )
 
-                # Recreate the generator so that positive and
-                # negative prompts in a pair use identical noise.
-                generator = torch.Generator(device="cpu").manual_seed(pair_seed)
+                run_specs = [
+                    ("negative", pair.negative_prompt),
+                    ("positive", pair.positive_prompt),
+                ]
 
-                pipeline_kwargs: dict[str, Any] = {
-                    "prompt": prompt,
-                    "width": int(self.generation_config.width),
-                    "height": int(self.generation_config.height),
-                    "num_inference_steps": (num_inference_steps),
-                    "guidance_scale": float(self.generation_config.guidance_scale),
-                    "max_sequence_length": int(self.generation_config.max_sequence_length),
-                    "num_images_per_prompt": int(self.generation_config.num_images_per_prompt),
-                    "generator": generator,
-                    # We do not need an image while collecting
-                    # transformer activations. This skips the
-                    # expensive VAE decode.
-                    "output_type": "latent",
-                }
-
-                if stop_callback is not None:
-                    pipeline_kwargs.update(
-                        {
-                            "callback_on_step_end": (stop_callback),
-                            # The callback does not need copies
-                            # of any tensors.
-                            "callback_on_step_end_tensor_inputs": [],
-                        }
+                for prompt_role, prompt in run_specs:
+                    self.intervention_manager.begin_prompt_run(
+                        pair_name=collection_pair_name,
+                        prompt_role=prompt_role,
                     )
 
-                with torch.inference_mode():
-                    _ = pipe(**pipeline_kwargs)
+                    self.logger.info(
+                        "Pair=%s, role=%s",
+                        collection_pair_name,
+                        prompt_role,
+                    )
+                    self.logger.info("Prompt: %s", prompt)
 
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
+                    # Recreate the generator so the two members of each
+                    # counterfactual pair use exactly the same noise.
+                    generator = torch.Generator(device="cpu").manual_seed(
+                        pair_seed
+                    )
+
+                    pipeline_kwargs: dict[str, Any] = {
+                        "prompt": prompt,
+                        "width": int(self.generation_config.width),
+                        "height": int(self.generation_config.height),
+                        "num_inference_steps": num_inference_steps,
+                        "guidance_scale": float(
+                            self.generation_config.guidance_scale
+                        ),
+                        "max_sequence_length": int(
+                            self.generation_config.max_sequence_length
+                        ),
+                        "num_images_per_prompt": int(
+                            self.generation_config.num_images_per_prompt
+                        ),
+                        "generator": generator,
+                        # No decoded image is required for activation
+                        # collection, so skip the VAE.
+                        "output_type": "latent",
+                    }
+
+                    if stop_callback is not None:
+                        pipeline_kwargs.update(
+                            {
+                                "callback_on_step_end": stop_callback,
+                                "callback_on_step_end_tensor_inputs": [],
+                            }
+                        )
+
+                    with torch.inference_mode():
+                        _ = pipe(**pipeline_kwargs)
+
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
 
         saved_metadata_path = self.intervention_manager.save_collected_activations()
 
@@ -157,6 +183,10 @@ class ActivationCollectionPipeline:
             "configured_inference_steps": (num_inference_steps),
             "stop_after_step": stop_after_step,
             "executed_transformer_steps_per_prompt": (executed_steps),
+            "source_prompt_pairs": len(self.dataset),
+            "seeds_per_pair": self.seeds_per_pair,
+            "replica_seed_stride": self.replica_seed_stride,
+            "effective_prompt_pairs": len(self.dataset) * self.seeds_per_pair,
             "output_type": "latent",
             "vae_decode": False,
             "early_stop_enabled": (

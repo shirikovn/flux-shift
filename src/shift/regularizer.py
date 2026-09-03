@@ -381,7 +381,7 @@ class BlockwiseSVMRegularizer:
         positive_probabilities = np.clip(positive_probabilities, 0.0, 1.0)
         p_cls = float(np.mean(positive_probabilities))
 
-        # The released implementation converts each ensemble member's
+        # The official implementation converts each ensemble member's
         # probability to odds first, clips it, and only then averages.
         member_eta = 1.0 / ((1.0 - positive_probabilities) + self.eps) - 1.0
         member_eta = np.clip(member_eta, 0.0, self.eta_max)

@@ -1,2 +1,4 @@
 _target_: src.pipelines.activation_collection_pipeline.ActivationCollectionPipeline
 seed_stride: ${collection.seed_stride}
+seeds_per_pair: ${collection.seeds_per_pair}
+replica_seed_stride: ${collection.replica_seed_stride}

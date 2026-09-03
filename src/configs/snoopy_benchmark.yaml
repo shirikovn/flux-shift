@@ -25,7 +25,7 @@ shift:
       - 2
       - 3
 
-  # Match the released FLUX callback: reuse step-0 SVMs.
+  # Match the official FLUX callback: reuse step-0 SVMs.
   classifier_timing:
     mode: shared
     source_step: 0
@@ -104,7 +104,7 @@ benchmark:
   num_templates: ${oc.env:SNOOPY_NUM_TEMPLATES,80}
   output_root: ${oc.env:SNOOPY_OUTPUT_ROOT,outputs/snoopy_table3}
 
-  # Nine seeds used in the authors' released evaluation.
+  # Nine seeds used in the authors' reported evaluation.
   seeds:
     - 10
     - 20

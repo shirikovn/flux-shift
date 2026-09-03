@@ -51,7 +51,7 @@ class ShiftTextBlockOutputHook:
 
     SHIFT is applied to the text residual representation that the
     next transformer block receives. This matches the activation
-    location used by the authors' released FLUX nudity launcher.
+    location used by the official ControlGenAI/SHIFT FLUX launcher.
 
     Depending on state.mode it:
       - disabled: observes only;

@@ -66,6 +66,15 @@ class MeanDifferenceCollector:
             torch.Tensor,
         ] = {}
 
+        # Sum of per-pair, per-token unit differences. Dividing this by the
+        # pair count produces a token-wise direction whose norm is also a
+        # directional-consistency score in [0, 1]. Unlike normalizing only
+        # after averaging, contradictory prompt-pair directions cancel.
+        self._unit_difference_sums: dict[
+            LocationKey,
+            torch.Tensor,
+        ] = {}
+
         self._pair_counts: dict[
             LocationKey,
             int,
@@ -180,6 +189,10 @@ class MeanDifferenceCollector:
         if location_key not in self._difference_sums:
             self._difference_sums[location_key] = torch.zeros_like(difference)
 
+            self._unit_difference_sums[location_key] = torch.zeros_like(
+                difference
+            )
+
             self._pair_counts[location_key] = 0
 
             self._pair_names[location_key] = []
@@ -187,6 +200,15 @@ class MeanDifferenceCollector:
             self._timesteps[location_key] = timestep
 
         self._difference_sums[location_key].add_(difference)
+
+        difference_norms = difference.norm(dim=-1, keepdim=True)
+        unit_difference = difference / difference_norms.clamp_min(self.eps)
+        unit_difference = torch.where(
+            difference_norms > self.eps,
+            unit_difference,
+            torch.zeros_like(unit_difference),
+        )
+        self._unit_difference_sums[location_key].add_(unit_difference)
 
         self._pair_counts[location_key] += 1
 
@@ -244,6 +266,14 @@ class MeanDifferenceCollector:
             tokenwise_raw = mean_difference.squeeze(0)
             tokenwise_vector = self._normalize(tokenwise_raw)
 
+            # Shape: [tokens, channels]. This remains token-wise: each prompt
+            # pair is normalized along channels before the prompt-pair mean.
+            # The resulting token norm measures agreement across pairs and is
+            # intentionally not normalized away.
+            consistent_vector = (
+                self._unit_difference_sums[location_key] / count
+            ).squeeze(0)
+
             # Shape: [channels].
             #
             # This is the prompt-pair mean difference followed by
@@ -260,6 +290,7 @@ class MeanDifferenceCollector:
             artifacts = {
                 "raw_difference": tokenwise_raw,
                 "vector": tokenwise_vector,
+                "consistent_vector": consistent_vector,
                 "token_mean_raw_difference": token_mean_raw,
                 "token_mean_vector": token_mean_vector,
             }
@@ -272,6 +303,7 @@ class MeanDifferenceCollector:
                 artifact_paths[artifact_name] = path
 
             token_norms = tokenwise_vector.norm(dim=-1)
+            consistency = consistent_vector.norm(dim=-1)
 
             location_metadata.append(
                 {
@@ -298,6 +330,28 @@ class MeanDifferenceCollector:
                         "raw_path": str(artifact_paths["token_mean_raw_difference"]),
                         "vector_path": str(artifact_paths["token_mean_vector"]),
                     },
+                    "tokenwise_consistent_difference": {
+                        "vector_shape": list(consistent_vector.shape),
+                        "estimator": (
+                            "mean_over_pairs_of_channel_l2_normalized_"
+                            "pair_differences"
+                        ),
+                        "token_consistency_min": float(consistency.min().item()),
+                        "token_consistency_mean": float(consistency.mean().item()),
+                        "token_consistency_max": float(consistency.max().item()),
+                        "token_fraction_ge_0_25": float(
+                            (consistency >= 0.25).float().mean().item()
+                        ),
+                        "token_fraction_ge_0_50": float(
+                            (consistency >= 0.50).float().mean().item()
+                        ),
+                        "token_fraction_ge_0_75": float(
+                            (consistency >= 0.75).float().mean().item()
+                        ),
+                        "vector_path": str(
+                            artifact_paths["consistent_vector"]
+                        ),
+                    },
                 }
             )
 
@@ -320,6 +374,15 @@ class MeanDifferenceCollector:
                     "pooling": "mean_over_text_tokens",
                     "normalization": normalization,
                     "filename": "step_XX_token_mean_vector.pt",
+                },
+                "tokenwise_consistent_difference": {
+                    "shape": "[tokens, channels]",
+                    "pair_normalization": "channel_l2_before_pair_mean",
+                    "final_normalization": "none",
+                    "token_norm_interpretation": (
+                        "directional_consistency_across_prompt_pairs"
+                    ),
+                    "filename": "step_XX_consistent_vector.pt",
                 },
             },
             "locations": location_metadata,

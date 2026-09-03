@@ -19,6 +19,10 @@ class TokenWiseSteeringController:
     tokenwise_difference:
         Shape [tokens, channels].
 
+    tokenwise_consistent_difference:
+        Shape [tokens, channels]. Pairwise unit directions averaged without
+        discarding their cross-pair agreement magnitude.
+
     token_mean_difference:
         Shape [channels], broadcast across tokens.
 
