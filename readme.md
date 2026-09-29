@@ -10,10 +10,36 @@ focuses on understanding that mechanism, obtaining comparable qualitative
 behavior on limited V100 hardware, and testing changes that improve semantic
 preservation during nudity erasure.
 
+| Baseline (redacted) | Partial suppression | Strong suppression |
+|:---:|:---:|:---:|
+| <img src="docs/results/nudity_vector_ablation/example_2_baseline_redacted.jpg" width="260" alt="Redacted baseline with the target concept present"> | <img src="docs/results/nudity_vector_ablation/example_2_strength_35.jpg" width="260" alt="Intermediate steering result"> | <img src="docs/results/nudity_vector_ablation/example_2_strength_50.jpg" width="260" alt="Strong steering result with clothing added"> |
+
+*One fixed synthetic-adult prompt and seed. SHIFT is applied only at inference
+time; model weights are unchanged. The full strength sweeps and aggregate
+metrics are below.*
+
 This is **not a claim of full paper reproduction**. The current quantitative
 results are a 16-image pilot study designed for method development. The
 [authors' implementation](https://github.com/ControlGenAI/SHIFT) remains the
 reference implementation.
+
+## What this repository adds
+
+- **More stable activation collection.** Positive and negative prompts are
+  matched counterfactuals, use identical noise seeds, and differ only in the
+  target clothing state. Activations are taken from the complete block output,
+  converted to FP32 before differencing and accumulation, and checked for
+  missing pairs, incompatible shapes, NaNs, and infinities.
+- **A new steering-vector estimator.** In addition to the paper-compatible
+  mean-then-normalize direction, `tokenwise_consistent_difference` normalizes
+  each prompt-pair difference before averaging. Its remaining token norm
+  measures cross-pair directional agreement.
+- **A closer reproduction of the released SVM path.** The implementation uses
+  mean-pooled, L2-normalized activations and a two-member linear probability-SVM
+  ensemble, with grouped validation for the matched dataset.
+- **A reproducible evaluation path.** Every image has matched prompt/seed
+  metadata, and the evaluator reports paired NudeNet suppression, CLIP
+  preservation, confidence intervals, and the full intervention parameters.
 
 ## Current result
 
@@ -87,14 +113,34 @@ The explicit area in the baseline is redacted in the supplied image.
 
 </details>
 
-## What changed during reproduction
+## Implemented improvements
 
-### Activation location
+### More stable activation collection
 
-The hook now reads and modifies the text branch of the **complete FLUX
-double-stream block output** (`transformer_block_output_text`). Artifact
-metadata records this location, and vector/SVM loading rejects incompatible
-artifacts.
+Early development runs showed that an averaged difference vector easily
+absorbs pose, composition, and scene changes unrelated to nudity. The current
+collector reduces those nuisance directions at their source:
+
+- 135 adult-only clothed/nude prompt pairs keep subject count, pose, view,
+  setting, framing, and style fixed inside each pair;
+- positive and negative generations reuse the same latent-noise seed;
+- two seed replicas are collected for every source pair;
+- the hook reads the text branch of the **complete FLUX double-stream block
+  output** (`transformer_block_output_text`), matching the released FLUX path;
+- captured tensors are detached to CPU and converted to FP32 before paired
+  differences, token normalization, and online accumulation;
+- the collector rejects missing or duplicate pair members, shape mismatches,
+  and non-finite activations or differences;
+- metadata records the activation location, pair names, timesteps, tensor
+  shapes, and normalization rule.
+
+Vector and classifier loaders validate this metadata and reject incompatible
+pre-block-output artifacts. Collection also skips VAE decoding and stops after
+the last requested diffusion step.
+
+This redesign produced the largest observed qualitative improvement during
+development. That is an empirical result from this setup, not an isolated
+causal estimate.
 
 ### Author-aligned SVM training
 
@@ -112,17 +158,7 @@ the positive/negative counterfactuals and their seed replicas cannot leak
 between training and validation. After validation, each member is refit on all
 samples for artifact generation.
 
-### Matched counterfactual collection
-
-The current nudity artifacts use 135 adult-only clothed/nude prompt pairs. The
-subject, number of people, pose, view, setting, framing, and style stay fixed
-inside each pair. Two matched noise seeds are collected per source pair.
-
-This change produced the largest observed qualitative improvement during local
-development because the averaged direction contains less unrelated scene and
-composition variation.
-
-### Alternative steering-vector estimator
+### New steering-vector estimator
 
 The repository saves both estimators from the same activations. For a prompt
 pair difference `d_i`:
@@ -133,9 +169,17 @@ tokenwise_consistent_difference = mean_i(normalize(d_i))
 ```
 
 Normalization is applied independently at every text-token position over the
-channel dimension. The second estimator keeps the norm of each averaged token
-as a measure of directional agreement across prompt pairs. It is an
-experimental extension, not part of the paper's reported method.
+channel dimension. In the standard estimator, a prompt pair with a large raw
+activation difference can dominate the mean before final normalization. The
+new estimator gives every non-zero pair direction unit length first.
+Directions that agree reinforce each other; inconsistent directions cancel and
+leave a lower token norm. That norm is deliberately preserved rather than
+normalized away.
+
+Both vectors are produced from the same activation collection in one pass, so
+the comparison does not introduce different prompts, seeds, hooks, or model
+weights. `tokenwise_consistent_difference` is an experimental extension, not
+part of the paper's reported method.
 
 In the present pilot, the alternative vector is gentler at the same numerical
 strength. It preserves image similarity well but does not outperform the
