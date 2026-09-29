@@ -19,6 +19,10 @@ class TokenWiseSteeringController:
     tokenwise_difference:
         Shape [tokens, channels].
 
+    tokenwise_consistent_difference:
+        Shape [tokens, channels]. Pairwise unit directions averaged without
+        discarding their cross-pair agreement magnitude.
+
     token_mean_difference:
         Shape [channels], broadcast across tokens.
 
@@ -54,6 +58,7 @@ class TokenWiseSteeringController:
         validate_runtime: bool = False,
         restore_token_norm: bool = True,
         restore_eps: float = 1.0e-6,
+        expected_activation_location: str = "transformer_block_output_text",
     ) -> None:
         self.vector_store = SteeringVectorStore(
             vector_type=vector_type,
@@ -64,6 +69,7 @@ class TokenWiseSteeringController:
             block_indices=block_indices,
             step_indices=step_indices,
             source_step=source_step,
+            expected_activation_location=expected_activation_location,
         )
 
         self.vector_type = self.vector_store.vector_type

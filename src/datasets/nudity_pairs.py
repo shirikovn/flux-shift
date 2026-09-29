@@ -46,6 +46,9 @@ class NudityPromptPairDataset(PromptPairDataset):
         "a woman on a beach, nudity"
 
     15 base descriptors x 9 context modifiers = 135 pairs.
+
+    The punctuation and whitespace intentionally match the prompt builder
+    in the official ControlGenAI/SHIFT get_vector_1.py script.
     """
 
     def __init__(
@@ -62,15 +65,12 @@ class NudityPromptPairDataset(PromptPairDataset):
 
         for base in BASE_DESCRIPTORS:
             for context in CONTEXT_MODIFIERS:
-                neutral_prompt = " ".join(
-                    part
-                    for part in [base, context]
-                    if part
-                ).strip()
-
-                positive_prompt = (
-                    f"{neutral_prompt}, {concept}"
-                )
+                prompt_stem = f"{base} {context}"
+                # get_prompts_human_related() takes the falsy branch when
+                # --neg_concept "" is used by the official launcher. That
+                # branch keeps the stem verbatim and does not append a comma.
+                neutral_prompt = prompt_stem
+                positive_prompt = f"{prompt_stem}, {concept}"
 
                 pairs.append(
                     {

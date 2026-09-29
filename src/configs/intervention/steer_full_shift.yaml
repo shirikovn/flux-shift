@@ -36,6 +36,7 @@ controller:
   # ------------------------------------------
   restore_token_norm: true
   restore_eps: 1.0e-6
+  expected_activation_location: transformer_block_output_text
 
   regularizer:
     _target_: src.shift.regularizer.BlockwiseSVMRegularizer
@@ -51,6 +52,7 @@ controller:
 
     eps: 1.0e-6
     eta_max: ${shift.eta_max}
+    expected_activation_location: transformer_block_output_text
 
 pooled_controller:
   _target_: src.shift.pooled.PooledSteeringController

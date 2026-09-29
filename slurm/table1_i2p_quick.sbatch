@@ -35,7 +35,7 @@ export TOKENIZERS_PARALLELISM=false
 # Development ladder (each larger run resumes the prefix):
 #
 # TABLE1_SAMPLE_SIZE=64 \
-# TABLE1_STRENGTHS=500 \
+# TABLE1_STRENGTHS=45 \
 # sbatch slurm/table1_i2p_quick.sbatch
 #
 # To use one GPU for a smoke test, override both the array
@@ -49,9 +49,15 @@ export TOKENIZERS_PARALLELISM=false
 export TABLE1_NUM_WORKERS="${TABLE1_NUM_WORKERS:-4}"
 export TABLE1_SAMPLE_SIZE="${TABLE1_SAMPLE_SIZE:-64}"
 export TABLE1_SAMPLE_SEED="${TABLE1_SAMPLE_SEED:-2026}"
-export TABLE1_STRENGTHS="${TABLE1_STRENGTHS:-500}"
+export TABLE1_STRENGTHS="${TABLE1_STRENGTHS:-45}"
 export TABLE1_I2P_CSV="${TABLE1_I2P_CSV:-data/i2p.csv}"
-export TABLE1_OUTPUT_ROOT="${TABLE1_OUTPUT_ROOT:-outputs/i2p_dev}"
+export TABLE1_OUTPUT_ROOT="${TABLE1_OUTPUT_ROOT:-outputs/i2p_block_output}"
+export TABLE1_CONFIG_NAME="${TABLE1_CONFIG_NAME:-table1_i2p_quick}"
+export SHIFT_ARTIFACTS_ROOT="${SHIFT_ARTIFACTS_ROOT:-artifacts/nudity_block_output}"
+export SHIFT_VECTOR_TYPE="${SHIFT_VECTOR_TYPE:-tokenwise_difference}"
+export SHIFT_MODEL_DTYPE="${SHIFT_MODEL_DTYPE:-float16}"
+export SHIFT_MEMORY_STRATEGY="${SHIFT_MEMORY_STRATEGY:-model_cpu_offload}"
+export TABLE1_ETA_MAX="${TABLE1_ETA_MAX:-20}"
 
 
 cd "$PROJECT_DIR"
@@ -76,6 +82,12 @@ echo "Sample seed: ${TABLE1_SAMPLE_SEED}"
 echo "Strengths: ${TABLE1_STRENGTHS}"
 echo "Dataset: ${TABLE1_I2P_CSV}"
 echo "Output: ${TABLE1_OUTPUT_ROOT}"
+echo "Config: ${TABLE1_CONFIG_NAME}"
+echo "Artifacts: ${SHIFT_ARTIFACTS_ROOT}"
+echo "Vector type: ${SHIFT_VECTOR_TYPE}"
+echo "Model dtype: ${SHIFT_MODEL_DTYPE}"
+echo "Memory strategy: ${SHIFT_MEMORY_STRATEGY}"
+echo "Classifier eta cap: ${TABLE1_ETA_MAX}"
 echo
 
 
@@ -89,10 +101,7 @@ echo "=========================================="
 
 test -f "${TABLE1_I2P_CSV}"
 
-ROW_COUNT=$(
-    tail -n +2 "${TABLE1_I2P_CSV}" \
-    | wc -l
-)
+ROW_COUNT=$(python -c 'import csv, sys; print(sum(1 for _ in csv.DictReader(open(sys.argv[1], encoding="utf-8", newline=""))))' "${TABLE1_I2P_CSV}")
 
 echo "I2P rows: ${ROW_COUNT}"
 
@@ -102,17 +111,40 @@ echo "=========================================="
 echo "CHECK SHIFT ARTIFACTS"
 echo "=========================================="
 
+case "${SHIFT_VECTOR_TYPE}" in
+    tokenwise_difference)
+        VECTOR_ROOT="${SHIFT_ARTIFACTS_ROOT}/dit/vectors"
+        VECTOR_PATTERN='step_00_vector.pt'
+        ;;
+    tokenwise_consistent_difference)
+        VECTOR_ROOT="${SHIFT_ARTIFACTS_ROOT}/dit/vectors"
+        VECTOR_PATTERN='step_00_consistent_vector.pt'
+        ;;
+    token_mean_difference)
+        VECTOR_ROOT="${SHIFT_ARTIFACTS_ROOT}/dit/vectors"
+        VECTOR_PATTERN='step_00_token_mean_vector.pt'
+        ;;
+    svm_normal)
+        VECTOR_ROOT="${SHIFT_ARTIFACTS_ROOT}/svm_training/classifiers"
+        VECTOR_PATTERN='step_00_svm_normal.pt'
+        ;;
+    *)
+        echo "ERROR: unsupported SHIFT_VECTOR_TYPE=${SHIFT_VECTOR_TYPE}"
+        exit 1
+        ;;
+esac
+
 VECTOR_COUNT=$(
     find \
-        artifacts/nudity/dit/vectors \
+        "${VECTOR_ROOT}" \
         -type f \
-        -name 'step_00_vector.pt' \
+        -name "${VECTOR_PATTERN}" \
         | wc -l
 )
 
 CLASSIFIER_COUNT=$(
     find \
-        artifacts/nudity/svm_training/classifiers \
+        "${SHIFT_ARTIFACTS_ROOT}/svm_training/classifiers" \
         -type f \
         -name 'step_*_classifier.joblib' \
         | wc -l
@@ -129,17 +161,20 @@ if [[ "${VECTOR_COUNT}" -ne 19 ]]; then
 fi
 
 
-if [[ "${CLASSIFIER_COUNT}" -ne 76 ]]; then
-    echo "ERROR: expected 76 SVM classifiers."
+if [[ "${CLASSIFIER_COUNT}" -ne 19 ]]; then
+    echo "ERROR: expected 19 shared step-0 SVM classifiers."
     exit 1
 fi
 
 
 test -f \
-    artifacts/nudity/pooled/pooled/pooled_vector.pt
+    "${SHIFT_ARTIFACTS_ROOT}/pooled/pooled/pooled_vector.pt"
 
 test -f \
-    artifacts/nudity/pooled/pooled/target_embedding.pt
+    "${SHIFT_ARTIFACTS_ROOT}/pooled/pooled/target_embedding.pt"
+
+python inspect_shift_artifacts.py \
+    --root "${SHIFT_ARTIFACTS_ROOT}"
 
 
 echo "Artifacts OK"
@@ -152,7 +187,8 @@ echo "=========================================="
 
 START_TIME=$(date +%s)
 
-time python table1_i2p.py
+time python table1_i2p.py \
+    --config-name "${TABLE1_CONFIG_NAME}"
 
 END_TIME=$(date +%s)
 

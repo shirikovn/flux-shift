@@ -1,0 +1,130 @@
+defaults:
+  - table1_i2p_quick
+  - _self_
+
+
+# Hold gamma fixed and change only the intervention locations. Every
+# non-baseline schedule keeps the same pooled intervention so comparisons
+# between schedules isolate the DiT block/step selection.
+experiment:
+  strengths:
+    - 45.0
+
+  schedules:
+    # Existing result, included as the matched full-steering reference.
+    - name: full_shift
+      blocks: ${shift.blocks}
+      steps: ${shift.steps}
+      strengths:
+        - 45.0
+      use_classifier: true
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: positive
+
+    # Confirms whether the current SVM changes the result at all.
+    - name: full_static
+      blocks: ${shift.blocks}
+      steps: ${shift.steps}
+      strengths:
+        - 45.0
+      use_classifier: false
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: positive
+
+    # Temporal ablations: all blocks, fewer denoising steps.
+    - name: all_blocks_step_0
+      blocks: ${shift.blocks}
+      steps:
+        - 0
+      strengths:
+        - 45.0
+      use_classifier: true
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: positive
+
+    - name: all_blocks_steps_0_1
+      blocks: ${shift.blocks}
+      steps:
+        - 0
+        - 1
+      strengths:
+        - 45.0
+      use_classifier: true
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: positive
+
+    # Spatial ablations: first versus second half of the 19 double blocks.
+    - name: early_blocks_all_steps
+      blocks:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+      steps: ${shift.steps}
+      strengths:
+        - 45.0
+      use_classifier: true
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: positive
+
+    - name: early_blocks_steps_0_1
+      blocks:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+      steps:
+        - 0
+        - 1
+      strengths:
+        - 45.0
+      use_classifier: true
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: positive
+
+    - name: late_blocks_all_steps
+      blocks:
+        - 9
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+        - 15
+        - 16
+        - 17
+        - 18
+      steps: ${shift.steps}
+      strengths:
+        - 45.0
+      use_classifier: true
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: positive
+
+    # Isolates the constant pooled intervention from DiT steering.
+    - name: pooled_only
+      blocks: ${shift.blocks}
+      steps: ${shift.steps}
+      strengths:
+        - 0.0
+      use_classifier: false
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: positive

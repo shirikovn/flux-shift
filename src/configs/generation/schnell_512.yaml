@@ -3,6 +3,6 @@ height: 512
 
 num_inference_steps: 4
 guidance_scale: 0.0
-max_sequence_length: 256
+max_sequence_length: 512
 
 num_images_per_prompt: 1

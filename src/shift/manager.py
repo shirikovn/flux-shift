@@ -6,7 +6,7 @@ import torch
 from torch.utils.hooks import RemovableHandle
 
 from src.shift.hooks import (
-    ShiftTextAttentionHook,
+    ShiftTextBlockOutputHook,
     TransformerStepHook,
 )
 from src.shift.state import ShiftRuntimeState
@@ -61,6 +61,8 @@ class ShiftInterventionManager:
         "steer",
     }
 
+    ACTIVATION_LOCATION = "transformer_block_output_text"
+
     def __init__(
         self,
         mode: str = "disabled",
@@ -94,7 +96,7 @@ class ShiftInterventionManager:
 
         self._step_handle: RemovableHandle | None = None
 
-        self._hook_objects: list[ShiftTextAttentionHook] = []
+        self._hook_objects: list[ShiftTextBlockOutputHook] = []
 
         self._installed = False
         self._num_double_blocks = 0
@@ -203,32 +205,14 @@ class ShiftInterventionManager:
         )
 
         for block_index, block in enumerate(blocks):
-            attention = getattr(
-                block,
-                "attn",
-                None,
-            )
-
-            if attention is None:
-                raise AttributeError(f"Double-stream block {block_index} " "has no 'attn' module.")
-
-            text_output_projection = getattr(
-                attention,
-                "to_add_out",
-                None,
-            )
-
-            if text_output_projection is None:
-                raise AttributeError(f"Attention in block {block_index} " "has no 'to_add_out'.")
-
-            hook = ShiftTextAttentionHook(
+            hook = ShiftTextBlockOutputHook(
                 block_index=block_index,
                 state=self.state,
                 collector=self.collector,
                 controller=self.controller,
             )
 
-            handle = text_output_projection.register_forward_pre_hook(hook)
+            handle = block.register_forward_hook(hook)
 
             self._hook_objects.append(hook)
             self._text_handles.append(handle)
@@ -293,6 +277,7 @@ class ShiftInterventionManager:
 
         return {
             "type": "shift",
+            "activation_location": self.ACTIVATION_LOCATION,
             "installed": self._installed,
             "registered_blocks": len(self._text_handles),
             "num_double_blocks": (self._num_double_blocks),

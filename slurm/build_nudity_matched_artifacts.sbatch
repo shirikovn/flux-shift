@@ -2,7 +2,7 @@
 
 #SBATCH --partition=rocky
 #SBATCH --constraint="[type_a|type_b|type_c]"
-#SBATCH --job-name=shift-nudity-artifacts
+#SBATCH --job-name=shift-nudity-matched
 #SBATCH --account=proj_1892
 
 #SBATCH --nodes=1
@@ -25,9 +25,11 @@ export HF_HOME=/home/nashirikov/huggingface
 export HF_HUB_OFFLINE=1
 export PYTHONUNBUFFERED=1
 export TOKENIZERS_PARALLELISM=false
-export SHIFT_ARTIFACTS_ROOT="${SHIFT_ARTIFACTS_ROOT:-artifacts/nudity_block_output}"
+export SHIFT_ARTIFACTS_ROOT="${SHIFT_ARTIFACTS_ROOT:-artifacts/nudity_matched_block_output}"
 export SHIFT_MODEL_DTYPE="${SHIFT_MODEL_DTYPE:-float16}"
 export SHIFT_MEMORY_STRATEGY="${SHIFT_MEMORY_STRATEGY:-model_cpu_offload}"
+export SHIFT_SEEDS_PER_PAIR="${SHIFT_SEEDS_PER_PAIR:-2}"
+export SHIFT_COLLECTION_RESOLUTION="${SHIFT_COLLECTION_RESOLUTION:-512}"
 
 
 cd "$PROJECT_DIR"
@@ -39,70 +41,59 @@ mkdir -p logs
 
 
 echo "=========================================="
-echo "SHIFT NUDITY ARTIFACT CONSTRUCTION"
+echo "SHIFT MATCHED NUDITY ARTIFACTS"
 echo "=========================================="
 echo "Date: $(date)"
 echo "Host: $(hostname)"
 echo "Job ID: ${SLURM_JOB_ID:-not-set}"
+echo "Root: ${SHIFT_ARTIFACTS_ROOT}"
 echo "Model dtype: ${SHIFT_MODEL_DTYPE}"
 echo "Memory strategy: ${SHIFT_MEMORY_STRATEGY}"
+echo "Matched seeds per source pair: ${SHIFT_SEEDS_PER_PAIR}"
+echo "Collection resolution: ${SHIFT_COLLECTION_RESOLUTION}x${SHIFT_COLLECTION_RESOLUTION}"
 echo
 
 nvidia-smi
 
-echo
-echo "Python:"
-python --version
-
-echo
-python - <<'PY'
-import torch
-
-print("Torch:", torch.__version__)
-print("CUDA:", torch.version.cuda)
-print("GPU:", torch.cuda.get_device_name(0))
-
-memory = (
-    torch.cuda.get_device_properties(0)
-    .total_memory
-    / 1024**3
-)
-
-print("VRAM:", round(memory, 2), "GiB")
-PY
-
 
 echo
 echo "=========================================="
-echo "1/3 COLLECT DIT ACTIVATIONS"
+echo "1/3 COLLECT MATCHED DIT ACTIVATIONS"
 echo "=========================================="
 
 time python collect_activations.py \
-    dataset=nudity_135 \
+    dataset=nudity_matched_135 \
     model=flux_schnell_v100 \
     generation=schnell_512 \
+    generation.width="${SHIFT_COLLECTION_RESOLUTION}" \
+    generation.height="${SHIFT_COLLECTION_RESOLUTION}" \
+    collection.seeds_per_pair="${SHIFT_SEEDS_PER_PAIR}" \
     hydra.run.dir="${SHIFT_ARTIFACTS_ROOT}/dit"
 
 
 echo
 echo "=========================================="
-echo "2/3 TRAIN SVM CLASSIFIERS"
+echo "2/3 TRAIN GROUP-VALIDATED SVM CLASSIFIERS"
 echo "=========================================="
 
 time python train_svm.py \
     trainer.dataset_dir="${SHIFT_ARTIFACTS_ROOT}/dit/svm_dataset" \
+    trainer.split_by_pair=true \
+    trainer.refit_full_after_validation=true \
     hydra.run.dir="${SHIFT_ARTIFACTS_ROOT}/svm_training"
 
 
 echo
 echo "=========================================="
-echo "3/3 COLLECT POOLED VECTOR"
+echo "3/3 COLLECT MATCHED POOLED VECTOR"
 echo "=========================================="
 
 time python collect_pooled_vector.py \
-    dataset=nudity_135 \
+    dataset=nudity_matched_135 \
     model=flux_schnell_v100 \
     generation=schnell_512 \
+    generation.width="${SHIFT_COLLECTION_RESOLUTION}" \
+    generation.height="${SHIFT_COLLECTION_RESOLUTION}" \
     target_prompt=nudity \
     hydra.run.dir="${SHIFT_ARTIFACTS_ROOT}/pooled"
 
@@ -112,58 +103,32 @@ echo "=========================================="
 echo "CHECK ARTIFACTS"
 echo "=========================================="
 
-VECTOR_COUNT=$(
-    find \
-        "${SHIFT_ARTIFACTS_ROOT}/dit/vectors" \
-        -type f \
-        -name 'step_00_vector.pt' \
-        | wc -l
+STANDARD_COUNT=$(
+    find "${SHIFT_ARTIFACTS_ROOT}/dit/vectors" \
+        -type f -name 'step_00_vector.pt' | wc -l
+)
+
+CONSISTENT_COUNT=$(
+    find "${SHIFT_ARTIFACTS_ROOT}/dit/vectors" \
+        -type f -name 'step_00_consistent_vector.pt' | wc -l
 )
 
 CLASSIFIER_COUNT=$(
-    find \
-        "${SHIFT_ARTIFACTS_ROOT}/svm_training/classifiers" \
-        -type f \
-        -name 'step_*_classifier.joblib' \
-        | wc -l
+    find "${SHIFT_ARTIFACTS_ROOT}/svm_training/classifiers" \
+        -type f -name 'step_00_classifier.joblib' | wc -l
 )
 
-
-echo "Step-0 steering vectors: ${VECTOR_COUNT}"
+echo "Standard token-wise vectors: ${STANDARD_COUNT}"
+echo "Consistency-weighted token-wise vectors: ${CONSISTENT_COUNT}"
 echo "SVM classifiers: ${CLASSIFIER_COUNT}"
 
+[[ "${STANDARD_COUNT}" -eq 19 ]]
+[[ "${CONSISTENT_COUNT}" -eq 19 ]]
+[[ "${CLASSIFIER_COUNT}" -eq 19 ]]
 
-if [[ "${VECTOR_COUNT}" -ne 19 ]]; then
-    echo "ERROR: expected 19 step-0 steering vectors."
-    exit 1
-fi
+test -f "${SHIFT_ARTIFACTS_ROOT}/pooled/pooled/pooled_vector.pt"
+test -f "${SHIFT_ARTIFACTS_ROOT}/pooled/pooled/target_embedding.pt"
 
+python inspect_shift_artifacts.py --root "${SHIFT_ARTIFACTS_ROOT}"
 
-if [[ "${CLASSIFIER_COUNT}" -ne 19 ]]; then
-    echo "ERROR: expected 19 shared step-0 classifiers."
-    exit 1
-fi
-
-
-test -f \
-    "${SHIFT_ARTIFACTS_ROOT}/pooled/pooled/pooled_vector.pt"
-
-test -f \
-    "${SHIFT_ARTIFACTS_ROOT}/pooled/pooled/target_embedding.pt"
-
-python inspect_shift_artifacts.py \
-    --root "${SHIFT_ARTIFACTS_ROOT}"
-
-
-echo
-echo "Artifact files:"
-find "${SHIFT_ARTIFACTS_ROOT}" \
-    -maxdepth 5 \
-    -type f \
-    | sort
-
-
-echo
-echo "=========================================="
-echo "DONE"
-echo "=========================================="
+echo "Matched artifact validation: OK"

@@ -1,0 +1,76 @@
+defaults:
+  - table1_i2p_quick
+  - _self_
+
+
+# Diagnose a new vector collection without conflating four effects:
+#
+#   1. step-0-only static steering tests the direction itself;
+#   2. all-step static steering tests temporal accumulation;
+#   3. dynamic steering adds only the SVM gate;
+#   4. the last schedule adds a deliberately weak pooled intervention.
+#
+# The official project page reports blocks 0-6 as the strongest range.
+vector_ablation:
+  strengths:
+    - 10.0
+    - 20.0
+    - 35.0
+    - 50.0
+    - 75.0
+
+  early_blocks:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+
+  all_steps:
+    - 0
+    - 1
+    - 2
+    - 3
+
+experiment:
+  strengths: ${vector_ablation.strengths}
+
+  schedules:
+    - name: early_step0_static
+      blocks: ${vector_ablation.early_blocks}
+      steps:
+        - 0
+      strengths: ${vector_ablation.strengths}
+      use_classifier: false
+      use_pooled: false
+      pooled_strength: 0.0
+      pooled_similarity_mode: positive
+
+    - name: early_all_steps_static
+      blocks: ${vector_ablation.early_blocks}
+      steps: ${vector_ablation.all_steps}
+      strengths: ${vector_ablation.strengths}
+      use_classifier: false
+      use_pooled: false
+      pooled_strength: 0.0
+      pooled_similarity_mode: positive
+
+    - name: early_all_steps_dynamic
+      blocks: ${vector_ablation.early_blocks}
+      steps: ${vector_ablation.all_steps}
+      strengths: ${vector_ablation.strengths}
+      use_classifier: true
+      use_pooled: false
+      pooled_strength: 0.0
+      pooled_similarity_mode: positive
+
+    - name: early_all_steps_dynamic_pool_0p5
+      blocks: ${vector_ablation.early_blocks}
+      steps: ${vector_ablation.all_steps}
+      strengths: ${vector_ablation.strengths}
+      use_classifier: true
+      use_pooled: true
+      pooled_strength: 0.5
+      pooled_similarity_mode: positive

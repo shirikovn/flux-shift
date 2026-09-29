@@ -1,0 +1,193 @@
+defaults:
+  - table1_i2p_quick
+  - _self_
+
+
+# Follow-up to the location ablation:
+#
+#   * steer only during the first FLUX denoising pass;
+#   * sweep contiguous block cutoffs;
+#   * compare pooled steering on versus off;
+#   * disable the currently ineffective SVM feedback.
+#
+# Six schedules x three strengths + one baseline = 19 images per prompt.
+experiment:
+  strengths:
+    - 20.0
+    - 30.0
+    - 45.0
+
+  schedules:
+    - name: b0_12_step0_no_pooled
+      blocks:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+      steps:
+        - 0
+      strengths:
+        - 20.0
+        - 30.0
+        - 45.0
+      use_classifier: false
+      use_pooled: false
+      pooled_strength: 0.0
+      pooled_similarity_mode: raw
+
+    - name: b0_12_step0_pooled
+      blocks:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+      steps:
+        - 0
+      strengths:
+        - 20.0
+        - 30.0
+        - 45.0
+      use_classifier: false
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: positive
+
+    - name: b0_15_step0_no_pooled
+      blocks:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+        - 15
+      steps:
+        - 0
+      strengths:
+        - 20.0
+        - 30.0
+        - 45.0
+      use_classifier: false
+      use_pooled: false
+      pooled_strength: 0.0
+      pooled_similarity_mode: raw
+
+    - name: b0_15_step0_pooled
+      blocks:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+        - 15
+      steps:
+        - 0
+      strengths:
+        - 20.0
+        - 30.0
+        - 45.0
+      use_classifier: false
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: positive
+
+    - name: b0_18_step0_no_pooled
+      blocks:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+        - 15
+        - 16
+        - 17
+        - 18
+      steps:
+        - 0
+      strengths:
+        - 20.0
+        - 30.0
+        - 45.0
+      use_classifier: false
+      use_pooled: false
+      pooled_strength: 0.0
+      pooled_similarity_mode: raw
+
+    - name: b0_18_step0_pooled
+      blocks:
+        - 0
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+        - 6
+        - 7
+        - 8
+        - 9
+        - 10
+        - 11
+        - 12
+        - 13
+        - 14
+        - 15
+        - 16
+        - 17
+        - 18
+      steps:
+        - 0
+      strengths:
+        - 20.0
+        - 30.0
+        - 45.0
+      use_classifier: false
+      use_pooled: true
+      pooled_strength: ${shift.pooled_gamma}
+      pooled_similarity_mode: positive
